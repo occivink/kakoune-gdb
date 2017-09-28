@@ -228,15 +228,18 @@ define-command gdb-jump-to-location %{
     }
 }
 
-define-command -params 1 gdb-cmd %{
+define-command -params 1.. gdb-cmd %{
     %sh{
         if [ ! -n "$kak_opt_gdb_dir" ]; then exit; fi
-        printf %s\\n "$1" > "$kak_opt_gdb_dir"/input_pipe
+        {
+            printf '%s ' "$@"
+            echo
+        } > "$kak_opt_gdb_dir"/input_pipe
     }
 }
 
-define-command gdb-run              %{ gdb-cmd run }
-define-command gdb-start            %{ gdb-cmd start }
+define-command gdb-run -params ..   %{ gdb-cmd run %arg{@} }
+define-command gdb-start -params .. %{ gdb-cmd start %arg{@} }
 define-command gdb-step             %{ gdb-cmd step }
 define-command gdb-next             %{ gdb-cmd next }
 define-command gdb-finish           %{ gdb-cmd finish }
