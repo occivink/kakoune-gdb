@@ -262,7 +262,17 @@ define-command gdb-toggle-breakpoint %{
         echo gdb-set-breakpoint
     }
 }
-define-command gdb-print %{ gdb-cmd "print %val{selection}" }
+
+define-command gdb-print -params ..1 %{
+    %sh{
+        if [ -n "$1" ]; then
+            print="$1"
+        else
+            print="%val{selection}"
+        fi
+        printf "gdb-cmd \"print %s\"" "$print"
+    }
+}
 
 declare-option -hidden str gdb_jump_client
 
