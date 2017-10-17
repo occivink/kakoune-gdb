@@ -206,7 +206,7 @@ define-command gdb-session-stop %{
                 rm "${kak_opt_gdb_dir}/pid" "${kak_opt_gdb_dir}/input_pipe"
                 rmdir "$kak_opt_gdb_dir"
             else
-                echo throw
+                echo fail
             fi
         }
         set-option global gdb_indicator ""

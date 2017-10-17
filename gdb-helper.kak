@@ -41,7 +41,7 @@ q:    stop}
 define-command -hidden -params 1 gdb-helper-impl %{
     %sh{
         if [ "$1" = "<esc>" ]; then
-            echo throw
+            echo fail
             exit
         fi
         todo=n,gdb-next:s,gdb-step:f,gdb-finish:r,gdb-start:R,gdb-run:c,gdb-continue:g,gdb-jump-to-location:G,gdb-toggle-autojump:t,gdb-toggle-breakpoint:T,gdb-backtrace:p,gdb-print:q,gdb-session-stop
