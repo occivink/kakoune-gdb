@@ -277,8 +277,13 @@ define-command gdb-print -params ..1 %{
 declare-option -hidden str gdb_jump_client
 
 define-command gdb-enable-autojump %{
-    set-option global gdb_autojump_indicator %opt{gdb_autojump_on_indicator}
-    set-option global gdb_jump_client %val{client}
+    try %{
+        %sh{
+            if [ ! -n "$kak_opt_gdb_dir" ]; then echo fail; fi
+        }
+        set-option global gdb_autojump_indicator %opt{gdb_autojump_on_indicator}
+        set-option global gdb_jump_client %val{client}
+    }
 }
 define-command gdb-disable-autojump %{
     set-option global gdb_autojump_indicator ""
