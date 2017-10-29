@@ -200,16 +200,17 @@ define-command -hidden gdb-session-connect-internal %{
 
 define-command gdb-session-stop %{
     try %{
-        gdb-disable-autojump
         %sh{
-            if [ -n "$kak_opt_gdb_dir" ]; then
-                kill $(ps -o pid= --ppid $(cat "${kak_opt_gdb_dir}/pid"))
-                rm "${kak_opt_gdb_dir}/pid" "${kak_opt_gdb_dir}/input_pipe"
-                rmdir "$kak_opt_gdb_dir"
-            else
-                echo fail
-            fi
+            if [ ! -n "$kak_opt_gdb_dir" ]; then echo fail; fi
         }
+        gdb-cmd quit
+        %sh{
+            kill $(ps -o pid= --ppid $(cat "${kak_opt_gdb_dir}/pid"))
+            rm -f "${kak_opt_gdb_dir}/pid" "${kak_opt_gdb_dir}/input_pipe"
+            rmdir "$kak_opt_gdb_dir"
+        }
+
+        gdb-disable-autojump
         set-option global gdb_indicator ""
         set-option global gdb_dir ""
 
