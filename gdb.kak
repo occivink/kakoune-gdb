@@ -200,6 +200,7 @@ define-command -hidden gdb-session-connect-internal %{
 
 define-command gdb-session-stop %{
     try %{
+        gdb-disable-autojump
         %sh{
             if [ -n "$kak_opt_gdb_dir" ]; then
                 kill $(ps -o pid= --ppid $(cat "${kak_opt_gdb_dir}/pid"))
