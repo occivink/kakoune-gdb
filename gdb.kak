@@ -30,13 +30,9 @@ declare-option -hidden str gdb_location_info
 declare-option -hidden line-specs gdb_breakpoints_flags
 declare-option -hidden line-specs gdb_location_flag
 
-add-highlighter -group / group -passes move gdb
-add-highlighter -group /gdb flag_lines GdbLocation gdb_location_flag
-add-highlighter -group /gdb flag_lines GdbBreakpoint gdb_breakpoints_flags
-
-hook global WinCreate .* %{
-    add-highlighter ref -passes move gdb
-}
+add-highlighter shared/ group -passes move gdb
+add-highlighter shared/gdb flag_lines GdbLocation gdb_location_flag
+add-highlighter shared/gdb flag_lines GdbBreakpoint gdb_breakpoints_flags
 
 define-command -params .. -file-completion gdb-session-new %{
     gdb-session-connect-internal
@@ -196,6 +192,7 @@ define-command -hidden gdb-session-connect-internal %{
     hook -group gdb global KakEnd .* %{
         gdb-session-stop
     }
+    add-highlighter global ref -passes move gdb
 }
 
 define-command gdb-session-stop %{
@@ -217,6 +214,7 @@ define-command gdb-session-stop %{
         gdb-clear-location
         gdb-clear-breakpoints
 
+        remove-highlighter global/gdb
         remove-hooks global gdb
     }
 }
