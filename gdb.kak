@@ -300,19 +300,22 @@ define-command gdb-toggle-autojump %{
 declare-option -hidden int backtrace_current_line
 
 define-command gdb-backtrace %{
-    %sh{
-        if [ ! -n "$kak_opt_gdb_dir" ]; then exit; fi
-        mkfifo "$kak_opt_gdb_dir"/backtrace
-        echo -stack-list-frames > "$kak_opt_gdb_dir"/input_pipe
-        echo "eval -try-client %opt{toolsclient} %{
-            edit! -fifo \"%opt{gdb_dir}/backtrace\" *backtrace*
+    try %{
+        %sh{
+            if [ ! -n "$kak_opt_gdb_dir" ]; then echo fail; fi
+            mkfifo "$kak_opt_gdb_dir"/backtrace
+        }
+        gdb-cmd -stack-list-frames
+        eval -try-client %opt{toolsclient} %{
+            edit! -fifo "%opt{gdb_dir}/backtrace" *backtrace*
             set buffer filetype backtrace
             set buffer backtrace_current_line 0
             hook -group fifo buffer BufCloseFifo .* %{
-                nop %sh{ rm -f \"${kak_opt_gdb_dir}/backtrace\" }
+                nop %sh{ rm -f "${kak_opt_gdb_dir}/backtrace" }
+                exec ged
                 remove-hooks buffer fifo
             }
-        }"
+        }
     }
 }
 
