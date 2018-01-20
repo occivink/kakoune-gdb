@@ -6,7 +6,7 @@
 
 Add `gdb.kak` to your autoload dir: `~/.config/kak/autoload/`, or source it manually. Optionally, add `gdb-helper.kak` to get higher-level commands meant to simplify the workflow.
 
-This script has hard dependencies on `gdb` (duh) and `socat`, as well as the usual POSIX environment. There is also on optional dependency on `rr`. 
+This script has hard dependencies on `gdb` (>= 7.12) and `socat`, as well as the usual POSIX environment. There is also on optional dependency on `rr`.
 
 ## Usage
 
