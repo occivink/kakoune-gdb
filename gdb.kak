@@ -1,7 +1,7 @@
 # script summary:
 # a long running shell process starts a gdb session (or connects to an existing one) and handles input/output
-# input (common gdb commands) to the gdb session is done by writing to a fifo
-# output is converted into corresponding kak commands to update the presented information
+# kakoune -> gdb communication is done by writing the gdb commands to a fifo
+# gdb -> kakoune communication is done by an awk process that translates gdb events into kakoune commands
  
 declare-option str gdb_breakpoint_active_symbol "●"
 declare-option str gdb_breakpoint_inactive_symbol "○"
@@ -319,14 +319,16 @@ define-command gdb-backtrace %{
     }
 }
 
-hook -group backtrace-highlight global WinSetOption filetype=backtrace %{
-    add-highlighter group backtrace
-    add-highlighter -group backtrace regex "^([^\n]*?):(\d+)" 1:cyan 2:green
-    add-highlighter -group backtrace line '%opt{backtrace_current_line}' default+b
+hook -group backtrace-highlight global BufSetOption filetype=backtrace %{
+    add-highlighter buffer group backtrace
+    add-highlighter buffer/backtrace regex "^([^\n]*?):(\d+)" 1:cyan 2:green
+    add-highlighter buffer/backtrace line '%opt{backtrace_current_line}' default+b
+    map buffer normal <ret> :gdb-backtrace-jump<ret>
 }
 
-hook global WinSetOption filetype=backtrace %{
-    hook buffer -group backtrace-hooks NormalKey <ret> gdb-backtrace-jump
+hook global BufSetOption filetype=(?!backtrace).* %{
+    remove-highlighter buffer/backtrace
+    unmap buffer normal <ret> :gdb-backtrace-jump<ret>
 }
 
 define-command -hidden gdb-backtrace-jump %{
