@@ -162,16 +162,16 @@ define-command -hidden gdb-session-connect-internal %{
             }
             /~".*"/ {
                 if (printing == 1) {
-                    print_value = print_value get($0, "= ", ".*", "\"")
+                    append = get($0, "= ", ".*", "\"")
                     printing = 2
                 } else if (printing) {
-                    print_value = print_value "\n" get($0, "\"", ".*","\"")
+                    append = get($0, "\"", ".*","\"")
                 }
+                gsub("\\\\n$", "\n", append)
+                print_value = print_value append
             }
             /\^done/ {
                 if (printing) {
-                    # trim trailing \n
-                    print_value = substr(print_value, 0, match(print_value, "(\n|\\\\n)*$") - 1)
                     # QUOTE => \\QUOTE
                     gsub("'\''", "\\\\'\''", print_value)
                     # eval -client $client QUOTE info  -- \QUOTE $string \QUOTE QUOTE
