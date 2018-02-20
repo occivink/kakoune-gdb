@@ -2,6 +2,8 @@
 
 [kakoune](http://kakoune.org) plugin to provide integration with gdb.
 
+[![demo](https://asciinema.org/a/164340.png)](https://asciinema.org/a/164340)
+
 ## Setup
 
 Add `gdb.kak` to your autoload dir: `~/.config/kak/autoload/`, or source it manually. Optionally, add `gdb-helper.kak` to get higher-level commands meant to simplify the workflow.
