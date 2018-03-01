@@ -332,7 +332,7 @@ hook global BufSetOption filetype=(?!backtrace).* %{
 }
 
 define-command -hidden gdb-backtrace-jump %{
-    eval -collapse-jumps %{
+    eval %{
         try %{
             exec -save-regs '' 'xs^([^:]+):(\d+)<ret>'
             set buffer backtrace_current_line %val{cursor_line}
@@ -343,7 +343,7 @@ define-command -hidden gdb-backtrace-jump %{
 }
 
 define-command gdb-backtrace-up %{
-    eval -collapse-jumps -try-client %opt{jumpclient} %{
+    eval -try-client %opt{jumpclient} %{
         buffer *backtrace*
         exec "%opt{backtrace_current_line}gk<ret>"
         gdb-backtrace-jump
@@ -352,7 +352,7 @@ define-command gdb-backtrace-up %{
 }
 
 define-command gdb-backtrace-down %{
-    eval -collapse-jumps -try-client %opt{jumpclient} %{
+    eval -try-client %opt{jumpclient} %{
         buffer *backtrace*
         exec "%opt{backtrace_current_line}gj<ret>"
         gdb-backtrace-jump

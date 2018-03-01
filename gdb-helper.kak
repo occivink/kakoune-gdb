@@ -54,6 +54,6 @@ define-command -hidden -params 1 gdb-helper-impl %{
                 exit
             fi
         done
-        echo "try %{ exec -with-maps $1 }"
+        echo "try %{ exec -with-maps \"$1\" }"
     }
 }
