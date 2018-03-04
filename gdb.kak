@@ -10,17 +10,15 @@ declare-option str gdb_location_symbol "➡"
 set-face GdbBreakpoint red,default
 set-face GdbLocation blue,default
 
-declare-option -hidden str gdb_on_indicator "gdb "
-declare-option -hidden str gdb_autojump_on_indicator "(autojump) "
-
-declare-option -hidden str gdb_indicator
-declare-option -hidden str gdb_autojump_indicator
-
-declare-option -hidden str gdb_dir
+# a debugging session has been started
+declare-option bool gdb_started false
 # the debugged program is currently running (stopped or not)
 declare-option bool gdb_program_running false
 # the debugged program is currently running, but stopped
 declare-option bool gdb_program_stopped false
+# if not empty, contains the name of client in which the autojump is performed
+declare-option str gdb_autojump_client
+
 # contains all known breakpoints in this format:
 # id|enabled|line|file:id|enabled|line|file|:...
 declare-option str-list gdb_breakpoints_info
@@ -28,6 +26,12 @@ declare-option str-list gdb_breakpoints_info
 # line|file
 declare-option str gdb_location_info
 # note that these variables may reference locations that are not in currently opened buffers
+
+# a visual indicator showing the current state of the script
+declare-option str gdb_indicator
+
+# the directory containing the input fifo, pty object and backtrace
+declare-option -hidden str gdb_dir
 
 # corresponding flags generated from the previous variables
 # these are only set on buffer scope
@@ -189,10 +193,12 @@ define-command -hidden gdb-session-connect-internal %{
         } 2>/dev/null >/dev/null &
         printf "$!" > "${tmpdir}/pid"
         printf "set-option global gdb_dir %s\n" "$tmpdir"
+        # put a dummy flag to prevent the columns from jiggling
         printf "set-option global gdb_location_flag '0:0|%${#kak_opt_gdb_location_symbol}s'\n"
         printf "set-option global gdb_breakpoints_flags '0:0|%${#kak_opt_gdb_breakpoint_active_symbol}s'\n"
     }
-    set-option global gdb_indicator %opt{gdb_on_indicator}
+    set-option global gdb_started  true
+    gdb-set-indicator-from-current-state
     hook -group gdb global BufOpenFile .* %{
         gdb-refresh-location-flag
         gdb-refresh-breakpoints-flags %val{buffile}
@@ -215,15 +221,20 @@ define-command gdb-session-stop %{
             rmdir "$kak_opt_gdb_dir"
         }
 
-        gdb-disable-autojump
+        # thoroughly clean all options
+        set-option global gdb_started false
+        set-option global gdb_program_running false
+        set-option global gdb_program_stopped false
+        set-option global gdb_autojump_client ""
         set-option global gdb_indicator ""
         set-option global gdb_dir ""
 
-        gdb-clear-location
-        gdb-clear-breakpoints
-
-        set-option global gdb_location_flag ""
-        set-option global gdb_breakpoints_flags ""
+        set-option global gdb_breakpoints_info ""
+        set-option global gdb_location_info ""
+        eval -buffer * %{
+            unset-option buffer gdb_location_flag
+            unset-option buffer gdb_breakpoint_flags
+        }
 
         remove-highlighter global/gdb
         remove-hooks global gdb
@@ -283,24 +294,22 @@ define-command gdb-print -params ..1 %{
     }
 }
 
-declare-option -hidden str gdb_jump_client
-
 define-command gdb-enable-autojump %{
     try %{
         %sh{
             if [ ! -n "$kak_opt_gdb_dir" ]; then echo fail; fi
         }
-        set-option global gdb_autojump_indicator %opt{gdb_autojump_on_indicator}
-        set-option global gdb_jump_client %val{client}
+        set-option global gdb_autojump_client %val{client}
+        gdb-set-indicator-from-current-state
     }
 }
 define-command gdb-disable-autojump %{
-    set-option global gdb_autojump_indicator ""
-    set-option global gdb_jump_client ""
+    set-option global gdb_autojump_client ""
+    gdb-set-indicator-from-current-state
 }
 define-command gdb-toggle-autojump %{
     %sh{
-        if [ -n "$kak_opt_gdb_jump_client" ]; then
+        if [ -n "$kak_opt_gdb_autojump_client" ]; then
             echo gdb-disable-autojump
         else
             echo gdb-enable-autojump
@@ -373,21 +382,37 @@ define-command gdb-backtrace-down %{
 
 # implementation details
 
+define-command -hidden gdb-set-indicator-from-current-state %{
+    set-option global gdb_indicator "%sh{
+        if [ \"$kak_opt_gdb_started\" = false ]; then exit; fi
+        printf 'gdb '
+        a=$(
+            [ \"$kak_opt_gdb_program_running\" = true ] && printf '[running]'
+            [ \"$kak_opt_gdb_program_stopped\" = true ] && printf '[stopped]'
+            [ -n \"$kak_opt_gdb_autojump_client\" ] && printf '[autojump]'
+        )
+        [ -n \"$a\" ] && printf \"$a \"
+    }"
+}
+
 define-command -hidden -params 2 gdb-handle-stopped %{
     set-option global gdb_program_stopped true
+    gdb-set-indicator-from-current-state
     set-option global gdb_location_info "%arg{1}|%arg{2}"
     gdb-refresh-location-flag
-    try %{ eval -client %opt{gdb_jump_client} gdb-jump-to-location }
+    try %{ eval -client %opt{gdb_autojump_client} gdb-jump-to-location }
 }
 
 define-command -hidden gdb-handle-exited %{
     set-option global gdb_program_running false
     set-option global gdb_program_stopped false
+    gdb-set-indicator-from-current-state
 }
 
 define-command -hidden gdb-handle-running %{
     set-option global gdb_program_running true
     set-option global gdb_program_stopped false
+    gdb-set-indicator-from-current-state
     gdb-clear-location
 }
 
