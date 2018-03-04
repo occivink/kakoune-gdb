@@ -2,7 +2,7 @@
 # a long running shell process starts a gdb session (or connects to an existing one) and handles input/output
 # kakoune -> gdb communication is done by writing the gdb commands to a fifo
 # gdb -> kakoune communication is done by an awk process that translates gdb events into kakoune commands
- 
+
 declare-option str gdb_breakpoint_active_symbol "●"
 declare-option str gdb_breakpoint_inactive_symbol "○"
 declare-option str gdb_location_symbol "➡"
@@ -10,19 +10,23 @@ declare-option str gdb_location_symbol "➡"
 set-face GdbBreakpoint red,default
 set-face GdbLocation blue,default
 
-declare-option str gdb_on_indicator "gdb "
-declare-option str gdb_autojump_on_indicator "(autojump) "
+declare-option -hidden str gdb_on_indicator "gdb "
+declare-option -hidden str gdb_autojump_on_indicator "(autojump) "
 
-declare-option str gdb_indicator
-declare-option str gdb_autojump_indicator
+declare-option -hidden str gdb_indicator
+declare-option -hidden str gdb_autojump_indicator
 
 declare-option -hidden str gdb_dir
+# the debugged program is currently running (stopped or not)
+declare-option bool gdb_program_running false
+# the debugged program is currently running, but stopped
+declare-option bool gdb_program_stopped false
 # contains all known breakpoints in this format:
 # id|enabled|line|file:id|enabled|line|file|:...
-declare-option -hidden str-list gdb_breakpoints_info
+declare-option str-list gdb_breakpoints_info
 # if execution is currently stopped, contains the location in this format:
 # line|file
-declare-option -hidden str gdb_location_info
+declare-option str gdb_location_info
 # note that these variables may reference locations that are not in currently opened buffers
 
 # corresponding flags generated from the previous variables
@@ -114,12 +118,14 @@ define-command -hidden gdb-session-connect-internal %{
                 }
             }
             /\*running/ {
-                send("gdb-clear-location")
+                send("gdb-handle-running")
             }
             /\*stopped/ {
                 reason = get($0, "reason=\"", "[^\"]*", "\"")
                 if (reason != "exited-normally" && reason != "exited") {
                     send("gdb-handle-stopped " frame_info($0))
+                } else {
+                    send("gdb-handle-exited")
                 }
             }
             /\^done,frame=/ {
@@ -363,9 +369,30 @@ define-command gdb-backtrace-down %{
 # implementation details
 
 define-command -hidden -params 2 gdb-handle-stopped %{
+    set-option global gdb_program_stopped true
     set-option global gdb_location_info "%arg{1}|%arg{2}"
     gdb-refresh-location-flag
     try %{ eval -client %opt{gdb_jump_client} gdb-jump-to-location }
+}
+
+define-command -hidden gdb-handle-exited %{
+    set-option global gdb_program_running false
+    set-option global gdb_program_stopped false
+}
+
+define-command -hidden gdb-handle-running %{
+    set-option global gdb_program_running true
+    set-option global gdb_program_stopped false
+    gdb-clear-location
+}
+
+define-command -hidden gdb-clear-location %{
+    %sh{
+        if [ ! -n "$kak_opt_gdb_location_info" ]; then exit; fi
+        buffer="${kak_opt_gdb_location_info#*|}"
+        printf "unset-option \"buffer=%s\" gdb_location_flag\n" "$buffer"
+    }
+    set-option global gdb_location_info ""
 }
 
 define-command -hidden gdb-refresh-location-flag %{
@@ -375,11 +402,6 @@ define-command -hidden gdb-refresh-location-flag %{
         buffer="${kak_opt_gdb_location_info#*|}"
         printf "try %%{ set-option -add \"buffer=%s\" gdb_location_flag \"%s|%s\" }\n" "$buffer" "$line" "$kak_opt_gdb_location_symbol"
     }
-}
-
-define-command -hidden gdb-clear-location %{
-    eval -buffer * %{ unset-option buffer gdb_location_flag }
-    set-option global gdb_location_info ""
 }
 
 define-command -hidden -params 4 gdb-handle-breakpoint-created %{

@@ -58,6 +58,23 @@ The `gdb-{enable,disable,toggle}-autojump` commands let you control if the curre
 
 The `gdb-helper.kak` script wraps these commands in shortcuts and shows an infobox detailing them. The `gdb-helper` command provides one-off shortcuts, and `gdb-helper-repeat` leaves the shortcuts on until `<esc>` is pressed.
 
+### Extending the script
+
+This script can be extended by defining your own commands. `gdb-cmd` is provided for that purpose: it simply forwards its arguments to the gdb process. Some of the predefined commands are defined like that:
+```
+define-command gdb-run -params ..   %{ gdb-cmd run %arg{@} }
+define-command gdb-start -params .. %{ gdb-cmd start %arg{@} }
+define-command gdb-step             %{ gdb-cmd step }
+define-command gdb-continue         %{ gdb-cmd continue }
+define-command gdb-advance          %{ gdb-cmd "advance %val{buffile}:%val{cursor_line}" }
+```
+
+You can also use the existing options to further refine your commands. You should treat these as read-only, modifying them is not supported.
+* `gdb_program_running`[bool]: true if the debugged program is currently running (stopped or not)
+* `gdb_program_stopped`[bool]: true if the debugged program is currently running, and stopped
+* `gdb_location_info`[str]: empty if the program is running, contains the location in the format `line|file` if stopped
+* `gdb_breakpoints_info`[str]: contains all known breakpoints in the format `id|enabled|line|file:id|enabled|line|file|:...`
+
 ### Customization
 
 The gutter symbols can be modified by changing the values of these options: 
