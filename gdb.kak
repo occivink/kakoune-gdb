@@ -121,16 +121,17 @@ define-command -hidden gdb-session-connect-internal %{
                     close("'"$tmpdir/input_pipe"'")
                 }
             }
-            /\*running/ {
+            /^\*running/ {
                 send("gdb-handle-running")
             }
-            /\*stopped/ {
+            /^\*stopped/ {
                 reason = get($0, "reason=\"", "[^\"]*", "\"")
-                if (reason != "exited-normally" && reason != "exited") {
+                if (reason != "exited" && reason != "exited-normally" && reason != "exited-signalled") {
                     send("gdb-handle-stopped " frame_info($0))
-                } else {
-                    send("gdb-handle-exited")
                 }
+            }
+            /^=thread-group-exited/ {
+                send("gdb-handle-exited")
             }
             /\^done,frame=/ {
                 send("gdb-clear-location; gdb-handle-stopped " frame_info($0))
@@ -148,13 +149,13 @@ define-command -hidden gdb-session-connect-internal %{
                 }
                 close("'"$tmpdir/backtrace"'")
             }
-            /=breakpoint-created/ {
+            /^=breakpoint-created/ {
                 send("gdb-handle-breakpoint-created " breakpoint_info($0))
             }
-            /=breakpoint-modified/ {
+            /^=breakpoint-modified/ {
                 send("gdb-handle-breakpoint-modified " breakpoint_info($0))
             }
-            /=breakpoint-deleted/ {
+            /^=breakpoint-deleted/ {
                 id = get($0, "id=\"", "[0-9]+", "\"")
                 send("gdb-handle-breakpoint-deleted " id)
             }
@@ -166,9 +167,11 @@ define-command -hidden gdb-session-connect-internal %{
                 }
                 send(command)
             }
-            /&"print/ {
+            /^&"print/ {
                 printing = 1
-                print_value = get($0, "print ", ".*", "..\"") " == "
+                var = get($0, "print ", ".*", "\"")
+                gsub("\\\\n$", "", var)
+                print_value = var " == "
             }
             /~".*"/ {
                 if (printing == 1) {
@@ -407,6 +410,7 @@ define-command -hidden gdb-handle-exited %{
     set-option global gdb_program_running false
     set-option global gdb_program_stopped false
     gdb-set-indicator-from-current-state
+    gdb-clear-location
 }
 
 define-command -hidden gdb-handle-running %{

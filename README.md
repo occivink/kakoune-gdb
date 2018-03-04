@@ -74,7 +74,7 @@ You can also use the existing options to further refine your commands. You shoul
 * `gdb_program_running`[bool]: true if the debugged program is currently running (stopped or not)
 * `gdb_program_stopped`[bool]: true if the debugged program is currently running, and stopped
 * `gdb_autojump_client`[str]: if autojump is enabled, the name of the client in which the jump is performed
-* `gdb_location_info`[str]: empty if the program is running, contains the location in the format `line|file` if stopped
+* `gdb_location_info`[str]: if running and stopped, contains the location in the format `line|file`
 * `gdb_breakpoints_info`[str]: contains all known breakpoints in the format `id|enabled|line|file:id|enabled|line|file|:...`
 
 ### Customization
@@ -91,7 +91,7 @@ GdbBreakpoint
 GdbLocation
 ```
 
-It is possible to show in the modeline the status of the plugin, `gdb_indicator`. In the demo, I use:
+It is possible to show in the modeline the status of the plugin using the option `gdb_indicator`. In the demo, I use:
 ```
 set global modelinefmt '%val{bufname} %val{cursor_line}:%val{cursor_char_column} {{context_info}} {{mode_info}} {red,default}%opt{gdb_indicator}{default,default}- %val{client}@[%val{session}]'
 ```
