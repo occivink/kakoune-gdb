@@ -189,8 +189,8 @@ define-command -hidden gdb-session-connect-internal %{
         } 2>/dev/null >/dev/null &
         printf "$!" > "${tmpdir}/pid"
         printf "set-option global gdb_dir %s\n" "$tmpdir"
-        printf "set-option global gdb_location_flag '0:0|%s'\n" "$(echo "$kak_opt_gdb_location_symbol" | sed 's/./ /g')"
-        printf "set-option global gdb_breakpoints_flags '0:0|%s'\n" "$(echo "$kak_opt_gdb_breakpoint_active_symbol" | sed 's/./ /g')"
+        printf "set-option global gdb_location_flag '0:0|%${#kak_opt_gdb_location_symbol}s'\n"
+        printf "set-option global gdb_breakpoints_flags '0:0|%${#kak_opt_gdb_breakpoint_active_symbol}s'\n"
     }
     set-option global gdb_indicator %opt{gdb_on_indicator}
     hook -group gdb global BufOpenFile .* %{
