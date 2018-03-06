@@ -27,6 +27,12 @@ declare-option str-list gdb_breakpoints_info
 declare-option str gdb_location_info
 # note that these variables may reference locations that are not in currently opened buffers
 
+# list of pending breakpoints, in this format:
+# line|file:line|file:...
+# "new" are the ones to be inserted, "old" are the ones to be deleted
+declare-option -hidden str-list gdb_new_breakpoints_pending
+declare-option -hidden str-list gdb_old_breakpoints_pending
+
 # a visual indicator showing the current state of the script
 declare-option str gdb_indicator
 
@@ -119,6 +125,7 @@ define-command -hidden gdb-session-connect-internal %{
             // {
                 if (!connected) {
                     connected = 1
+                    print("-gdb-set mi-async on") >> "'"$tmpdir/input_pipe"'"
                     print("-break-list") >> "'"$tmpdir/input_pipe"'"
                     print("-stack-info-frame") >> "'"$tmpdir/input_pipe"'"
                     close("'"$tmpdir/input_pipe"'")
@@ -274,30 +281,15 @@ define-command -params 1.. gdb-cmd %{
     }
 }
 
-define-command gdb-run -params ..   %{ gdb-cmd run %arg{@} }
-define-command gdb-start -params .. %{ gdb-cmd start %arg{@} }
-define-command gdb-step             %{ gdb-cmd step }
-define-command gdb-next             %{ gdb-cmd next }
-define-command gdb-finish           %{ gdb-cmd finish }
-define-command gdb-continue         %{ gdb-cmd continue }
-define-command gdb-advance          %{ gdb-cmd "advance %val{buffile}:%val{cursor_line}" }
-define-command gdb-set-breakpoint   %{ gdb-cmd "break %val{buffile}:%val{cursor_line}" }
-define-command gdb-clear-breakpoint %{ gdb-cmd "clear %val{buffile}:%val{cursor_line}" }
-define-command gdb-toggle-breakpoint %{
-    %sh{
-        IFS=:
-        for current in $kak_opt_gdb_breakpoints_info; do
-            buffer="${current#*|*|*|}"
-            current="${current#*|*|}"
-            line="${current%%|*}"
-            if [ "$buffer" = "$kak_buffile" ] && [ "$line" = "$kak_cursor_line" ]; then
-                echo gdb-clear-breakpoint
-                exit
-            fi
-        done
-        echo gdb-set-breakpoint
-    }
-}
+define-command gdb-run -params ..    %{ gdb-cmd -exec-run %arg{@} }
+define-command gdb-start -params ..  %{ gdb-cmd -exec-run --start %arg{@} }
+define-command gdb-step              %{ gdb-cmd -exec-step }
+define-command gdb-next              %{ gdb-cmd -exec-next }
+define-command gdb-finish            %{ gdb-cmd -exec-finish }
+define-command gdb-continue          %{ gdb-cmd -exec-continue }
+define-command gdb-set-breakpoint    %{ gdb-breakpoint-impl false true }
+define-command gdb-clear-breakpoint  %{ gdb-breakpoint-impl true false }
+define-command gdb-toggle-breakpoint %{ gdb-breakpoint-impl true true }
 
 define-command gdb-print -params ..1 %{
     %sh{
@@ -411,24 +403,135 @@ define-command -hidden gdb-set-indicator-from-current-state %{
     }"
 }
 
+# the two params are bool that indicate the following
+# if %arg{1} == true, existing breakpoints where there is a cursor are cleared (untouched otherwise)
+# if %arg{2} == true, new breakpoints are set where there is a cursor and no breakpoint (not created otherwise)
+define-command gdb-breakpoint-impl -hidden -params 2 %{
+    try %{
+        eval -draft %{
+            # reduce to cursors so that we can just extract the line out of selections_desc without any hassle
+            exec '<a-x>gh'
+            %sh{
+                if [ "$kak_opt_gdb_started" = false ]; then exit; fi
+                # setting IFS is safe here because it's not arbitrary input
+                IFS=:
+                lines_with_breakpoints=$(
+                    for current in $kak_opt_gdb_breakpoints_info; do
+                        buffer="${current#*|*|*|}"
+                        if [ "$buffer" = "$kak_buffile" ]; then
+                            line_file="${current#*|*|}"
+                            line="${line_file%%|*}"
+                            printf "%s:" "$line"
+                        fi
+                    done
+                )
+                line_has_breakpoint() {
+                    for tmp in $lines_with_breakpoints; do
+                        if [ "$1" = "$tmp" ]; then
+                            return 0
+                        fi
+                    done
+                    return 1
+                }
+                if [ "$kak_opt_gdb_program_running" = false ] ||
+                    [ "$kak_opt_gdb_program_stopped" = true ]
+                then
+                    # not started or stopped, we can safely manipulate the breakpoints directly
+                    for i in $kak_selections_desc; do
+                        line=${i%%.*}
+                        if line_has_breakpoint $line; then
+                            [ "$1" = false ] && continue
+                            op="clear"
+                        else
+                            [ "$2" = false ] && continue
+                            op="break"
+                        fi
+                        printf "%s %s:%s\n" "$op" "$kak_buffile" "$line"
+                    done > "$kak_opt_gdb_dir"/input_pipe
+                else
+                    if [ -n "$kak_opt_gdb_old_breakpoints_pending" ] ||
+                        [ -n "$kak_opt_gdb_new_breakpoints_pending" ]
+                    then
+                        echo fail
+                        exit
+                    fi
+                    # running, we first have to stop the program
+                    for i in $kak_selections_desc; do
+                        line=${i%%.*}
+                        if line_has_breakpoint $line; then
+                            [ "$1" = false ] && continue
+                            state="old"
+                        else
+                            [ "$2" = false ] && continue
+                            state="new"
+                        fi
+                        printf "set-option -add global gdb_%s_breakpoints_pending \"%s|%s\"\n" "$state" "$line" "$kak_buffile"
+                    done
+                    # STOP!
+                    # breakpoint time
+                    echo "-exec-interrupt" > "$kak_opt_gdb_dir"/input_pipe
+                fi
+            }
+        }
+    } catch %{
+        echo -markup "{black,red}Pending operations in progress"
+    }
+}
+
+
 define-command -hidden -params 2 gdb-handle-stopped %{
-    set-option global gdb_program_stopped true
-    gdb-set-indicator-from-current-state
-    set-option global gdb_location_info "%arg{1}|%arg{2}"
-    gdb-refresh-location-flag
-    try %{ eval -client %opt{gdb_autojump_client} gdb-jump-to-location }
+    try %{
+        gdb-handle-pending-breakpoints
+        gdb-continue
+    } catch %{
+        set-option global gdb_program_stopped true
+        gdb-set-indicator-from-current-state
+        set-option global gdb_location_info "%arg{1}|%arg{2}"
+        gdb-refresh-location-flag
+        try %{ eval -client %opt{gdb_autojump_client} gdb-jump-to-location }
+    }
 }
 
 define-command -hidden gdb-handle-stopped-unknown %{
-    set-option global gdb_program_stopped true
-    gdb-set-indicator-from-current-state
+    try %{
+        gdb-handle-pending-breakpoints
+        gdb-continue
+    } catch %{
+        set-option global gdb_program_stopped true
+        gdb-set-indicator-from-current-state
+    }
 }
 
 define-command -hidden gdb-handle-exited %{
+    try %{ gdb-handle-pending-breakpoints }
     set-option global gdb_program_running false
     set-option global gdb_program_stopped false
     gdb-set-indicator-from-current-state
     gdb-clear-location
+}
+
+define-command -hidden gdb-handle-pending-breakpoints %{
+    %sh{
+        if [ ! -n "$kak_opt_gdb_old_breakpoints_pending" ] && [ ! -n "$kak_opt_gdb_new_breakpoints_pending" ]; then
+            echo fail
+            exit
+        fi
+        {
+            IFS=:
+            for i in $kak_opt_gdb_old_breakpoints_pending; do
+                line=${i%%|*}
+                file=${i#*|}
+                printf "clear %s:%s\n" "$file" "$line"
+            done
+            for i in $kak_opt_gdb_new_breakpoints_pending; do
+                line=${i%%|*}
+                file=${i#*|}
+                printf "break %s:%s\n" "$file" "$line"
+            done
+        } > "$kak_opt_gdb_dir"/input_pipe
+    }
+    set-option global gdb_old_breakpoints_pending ""
+    set-option global gdb_new_breakpoints_pending ""
 }
 
 define-command -hidden gdb-handle-running %{

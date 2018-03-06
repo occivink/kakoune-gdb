@@ -27,7 +27,6 @@ define-command -hidden gdb-helper-info %{
 %{n:    step over (next)
 s:    step in (step)
 f:    step out (finish)
-a:    advance
 r:    start
 R:    run
 c:    continue
@@ -45,7 +44,7 @@ define-command -hidden -params 1 gdb-helper-impl %{
             echo fail
             exit
         fi
-        todo=n,gdb-next:s,gdb-step:f,gdb-finish:a,gdb-advance:r,gdb-start:R,gdb-run:c,gdb-continue:g,gdb-jump-to-location:G,gdb-toggle-autojump:t,gdb-toggle-breakpoint:T,gdb-backtrace:p,gdb-print:q,gdb-session-stop
+        todo=n,gdb-next:s,gdb-step:f,gdb-finish:r,gdb-start:R,gdb-run:c,gdb-continue:g,gdb-jump-to-location:G,gdb-toggle-autojump:t,gdb-toggle-breakpoint:T,gdb-backtrace:p,gdb-print:q,gdb-session-stop
         IFS=:
         for com in $todo; do
             key="${com%%,*}"

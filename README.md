@@ -44,7 +44,6 @@ The script provides commands for the most common operations; complex ones should
 | `gdb-next` | `next` | execute the next line of the current function (step over)|
 | `gdb-finish` | `finish` | continue execution until the end of the current function (step out)|
 | `gdb-continue` | `continue` | continue execution until the next breakpoint |
-| `gdb-advance` | `advance` | continue execution until it reaches the cursor location or exits the current function |
 | `gdb-jump-to-location` | - | if execution is stopped, jump to the location |
 | `gdb-set-breakpoint` | `break` | set a breakpoint at the cursor location |
 | `gdb-clear-breakpoint` | `clear` | remove any breakpoints at the cursor location |
@@ -62,11 +61,12 @@ The `gdb-helper.kak` script wraps these commands in shortcuts and shows an infob
 
 This script can be extended by defining your own commands. `gdb-cmd` is provided for that purpose: it simply forwards its arguments to the gdb process. Some of the predefined commands are defined like that:
 ```
-define-command gdb-run -params ..   %{ gdb-cmd run %arg{@} }
-define-command gdb-start -params .. %{ gdb-cmd start %arg{@} }
-define-command gdb-step             %{ gdb-cmd step }
-define-command gdb-continue         %{ gdb-cmd continue }
-define-command gdb-advance          %{ gdb-cmd "advance %val{buffile}:%val{cursor_line}" }
+define-command gdb-run -params ..    %{ gdb-cmd -exec-run %arg{@} }
+define-command gdb-start -params ..  %{ gdb-cmd -exec-run --start %arg{@} }
+define-command gdb-step              %{ gdb-cmd -exec-step }
+define-command gdb-next              %{ gdb-cmd -exec-next }
+define-command gdb-finish            %{ gdb-cmd -exec-finish }
+define-command gdb-continue          %{ gdb-cmd -exec-continue }
 ```
 
 You can also use the existing options to further refine your commands. You should treat these as read-only, modifying them is not supported.
