@@ -215,10 +215,11 @@ define-command -hidden gdb-session-connect-internal %{
 define-command gdb-session-stop %{
     try %{
         %sh{
-            if [ ! -n "$kak_opt_gdb_dir" ]; then echo fail; fi
+            if [ "$kak_opt_gdb_started" = false ]; then echo fail; fi
         }
         gdb-cmd quit
         %sh{
+            #TODO: this might not be posix-compliant
             kill $(ps -o pid= --ppid $(cat "${kak_opt_gdb_dir}/pid"))
             rm -f "${kak_opt_gdb_dir}/pid" "${kak_opt_gdb_dir}/input_pipe"
             rmdir "$kak_opt_gdb_dir"
@@ -246,7 +247,7 @@ define-command gdb-session-stop %{
 
 define-command gdb-jump-to-location %{
     %sh{
-        if [ ! -n "$kak_opt_gdb_location_info" ]; then exit; fi
+        if [ "$kak_opt_gdb_stopped" = false ]; then exit; fi
         line="${kak_opt_gdb_location_info%%|*}"
         buffer="${kak_opt_gdb_location_info#*|}"
         printf "edit -existing \"%s\" %s\n" "$buffer" "$line"
@@ -255,9 +256,9 @@ define-command gdb-jump-to-location %{
 
 define-command -params 1.. gdb-cmd %{
     %sh{
-        if [ ! -n "$kak_opt_gdb_dir" ]; then exit; fi
-        c=$(printf '%s ' "$@")
-        printf %s\\n "${c% }"  > "$kak_opt_gdb_dir"/input_pipe
+        if [ "$kak_opt_gdb_started" = false ]; then exit; fi
+        IFS=' '
+        printf %s\\n "$*"  > "$kak_opt_gdb_dir"/input_pipe
     }
 }
 
@@ -300,7 +301,7 @@ define-command gdb-print -params ..1 %{
 define-command gdb-enable-autojump %{
     try %{
         %sh{
-            if [ ! -n "$kak_opt_gdb_dir" ]; then echo fail; fi
+            if [ "$kak_opt_gdb_started" = false ]; then echo fail; fi
         }
         set-option global gdb_autojump_client %val{client}
         gdb-set-indicator-from-current-state
@@ -325,7 +326,7 @@ declare-option -hidden int backtrace_current_line
 define-command gdb-backtrace %{
     try %{
         %sh{
-            if [ ! -n "$kak_opt_gdb_dir" ]; then echo fail; fi
+            if [ "$kak_opt_gdb_stopped" = false ]; then echo fail; fi
             mkfifo "$kak_opt_gdb_dir"/backtrace
         }
         gdb-cmd -stack-list-frames
@@ -334,7 +335,7 @@ define-command gdb-backtrace %{
             set buffer filetype backtrace
             set buffer backtrace_current_line 0
             hook -group fifo buffer BufCloseFifo .* %{
-                nop %sh{ rm -f "${kak_opt_gdb_dir}/backtrace" }
+                nop %sh{ rm -f "$kak_opt_gdb_dir"/backtrace }
                 exec ged
                 remove-hooks buffer fifo
             }
