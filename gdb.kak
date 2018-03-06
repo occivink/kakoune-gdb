@@ -107,7 +107,10 @@ define-command -hidden gdb-session-connect-internal %{
             function frame_info(frame) {
                 file = get(frame, "fullname=\"", "[^\"]*", "\"")
                 line = get(frame, "line=\"", "[0-9]+", "\"")
-                return line " \"" file "\""
+                if (line == "" || file == "")
+                    return ""
+                else
+                    return line " \"" file "\""
             }
             BEGIN {
                 connected = 0
@@ -127,7 +130,11 @@ define-command -hidden gdb-session-connect-internal %{
             /^\*stopped/ {
                 reason = get($0, "reason=\"", "[^\"]*", "\"")
                 if (reason != "exited" && reason != "exited-normally" && reason != "exited-signalled") {
-                    send("gdb-handle-stopped " frame_info($0))
+                    info = frame_info($0)
+                    if (info == "")
+                        send("gdb-handle-stopped-unknown")
+                    else
+                        send("gdb-handle-stopped " info)
                 }
             }
             /^=thread-group-exited/ {
@@ -410,6 +417,11 @@ define-command -hidden -params 2 gdb-handle-stopped %{
     set-option global gdb_location_info "%arg{1}|%arg{2}"
     gdb-refresh-location-flag
     try %{ eval -client %opt{gdb_autojump_client} gdb-jump-to-location }
+}
+
+define-command -hidden gdb-handle-stopped-unknown %{
+    set-option global gdb_program_stopped true
+    gdb-set-indicator-from-current-state
 }
 
 define-command -hidden gdb-handle-exited %{
