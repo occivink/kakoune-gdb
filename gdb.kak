@@ -167,6 +167,11 @@ define-command -hidden gdb-session-connect-internal %{
                 }
                 send(command)
             }
+            /^\^error/ {
+                msg = get($0, "msg=\"", ".*", "\"")
+                gsub("'\''", "\\\\'\''", msg)
+                send("echo -debug '\''" msg "'\''")
+            }
             /^&"print/ {
                 printing = 1
                 var = get($0, "print ", ".*", "\"")
