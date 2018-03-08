@@ -96,6 +96,13 @@ It is possible to show in the modeline the status of the plugin using the option
 set global modelinefmt '%val{bufname} %val{cursor_line}:%val{cursor_char_column} {{context_info}} {{mode_info}} {red,default}%opt{gdb_indicator}{default,default}- %val{client}@[%val{session}]'
 ```
 
+## TODO
+
+* (optionally) put the result of gdb-print into a scratch buffer, in addition to the infobox
+* set temporary/conditional breakpoints
+* handle up/down, and moving the current frame from the backtrace buffer
+* another helper script, that follow the shortcuts of other debuggers
+
 ## License
 
 Unlicense
