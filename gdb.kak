@@ -2,6 +2,8 @@
 # a long running shell process starts a gdb session (or connects to an existing one) and handles input/output
 # kakoune -> gdb communication is done by writing the gdb commands to a fifo
 # gdb -> kakoune communication is done by an awk process that translates gdb events into kakoune commands
+ 
+# the gdb-handle-* commands act upon gdb notifications to update the kakoune state
 
 declare-option str gdb_breakpoint_active_symbol "●"
 declare-option str gdb_breakpoint_inactive_symbol "○"
@@ -222,7 +224,7 @@ define-command -hidden gdb-session-connect-internal %{
     set-option global gdb_started  true
     gdb-set-indicator-from-current-state
     hook -group gdb global BufOpenFile .* %{
-        gdb-refresh-location-flag
+        gdb-refresh-location-flag %val{buffile}
         gdb-refresh-breakpoints-flags %val{buffile}
     }
     hook -group gdb global KakEnd .* %{
@@ -292,13 +294,11 @@ define-command gdb-clear-breakpoint  %{ gdb-breakpoint-impl true false }
 define-command gdb-toggle-breakpoint %{ gdb-breakpoint-impl true true }
 
 define-command gdb-print -params ..1 %{
-    %sh{
-        if [ -n "$1" ]; then
-            print="$1"
-        else
-            print="%val{selection}"
-        fi
-        printf "gdb-cmd \"print %s\"" "$print"
+    try %{
+        %sh{ [ -z "$1" ] && echo fail }
+        gdb-cmd "print %arg{1}"
+    } catch %{
+        gdb-cmd "print %val{selection}"
     }
 }
 
@@ -481,20 +481,20 @@ define-command gdb-breakpoint-impl -hidden -params 2 %{
 
 define-command -hidden -params 2 gdb-handle-stopped %{
     try %{
-        gdb-handle-pending-breakpoints
+        gdb-process-pending-breakpoints
         gdb-continue
     } catch %{
         set-option global gdb_program_stopped true
         gdb-set-indicator-from-current-state
         set-option global gdb_location_info "%arg{1}|%arg{2}"
-        gdb-refresh-location-flag
+        gdb-refresh-location-flag %arg{2}
         try %{ eval -client %opt{gdb_autojump_client} gdb-jump-to-location }
     }
 }
 
 define-command -hidden gdb-handle-stopped-unknown %{
     try %{
-        gdb-handle-pending-breakpoints
+        gdb-process-pending-breakpoints
         gdb-continue
     } catch %{
         set-option global gdb_program_stopped true
@@ -503,14 +503,14 @@ define-command -hidden gdb-handle-stopped-unknown %{
 }
 
 define-command -hidden gdb-handle-exited %{
-    try %{ gdb-handle-pending-breakpoints }
+    try %{ gdb-process-pending-breakpoints }
     set-option global gdb_program_running false
     set-option global gdb_program_stopped false
     gdb-set-indicator-from-current-state
     gdb-clear-location
 }
 
-define-command -hidden gdb-handle-pending-breakpoints %{
+define-command -hidden gdb-process-pending-breakpoints %{
     %sh{
         if [ ! -n "$kak_opt_gdb_old_breakpoints_pending" ] && [ ! -n "$kak_opt_gdb_new_breakpoints_pending" ]; then
             echo fail
@@ -550,12 +550,20 @@ define-command -hidden gdb-clear-location %{
     set-option global gdb_location_info ""
 }
 
-define-command -hidden gdb-refresh-location-flag %{
-    %sh{
-        if [ ! -n "$kak_opt_gdb_location_info" ]; then exit; fi
-        line="${kak_opt_gdb_location_info%%|*}"
-        buffer="${kak_opt_gdb_location_info#*|}"
-        printf "try %%{ set-option -add \"buffer=%s\" gdb_location_flag \"%s|%s\" }\n" "$buffer" "$line" "$kak_opt_gdb_location_symbol"
+# refresh the location flag of the buffer passed as argument
+define-command -hidden -params 1 gdb-refresh-location-flag %{
+    # buffer may not exist, only try
+    try %{
+        eval -buffer %arg{1} %{
+            %sh{
+                if [ ! -n "$kak_opt_gdb_location_info" ]; then exit; fi
+                buffer="${kak_opt_gdb_location_info#*|}"
+                if [ "$1" = "$buffer" ]; then
+                    line="${kak_opt_gdb_location_info%%|*}"
+                    printf "set-option -add buffer gdb_location_flag \"%s|%s\"\n" "$line" "$kak_opt_gdb_location_symbol"
+                fi
+            }
+        }
     }
 }
 
@@ -596,28 +604,30 @@ define-command -hidden -params 4 gdb-handle-breakpoint-modified %{
     gdb-refresh-breakpoints-flags %arg{4}
 }
 
-# refresh the breakpoint indicators of the file passed as parameter
+# refresh the breakpoint flags of the file passed as argument
 define-command -hidden -params 1 gdb-refresh-breakpoints-flags %{
     # buffer may not exist, so only try
     try %{
-        unset-option "buffer=%arg{1}" gdb_breakpoints_flags
-        %sh{
-            IFS=:
-            for current in $kak_opt_gdb_breakpoints_info; do
-                buffer="${current#*|*|*|}"
-                if [ "$buffer" = "$1" ]; then
-                    current="${current#*|}"
-                    enabled="${current%%|*}"
-                    current="${current#*|}"
-                    line="${current%%|*}"
-                    if [ "$enabled" = y ]; then
-                        flag="$kak_opt_gdb_breakpoint_active_symbol"
-                    else
-                        flag="$kak_opt_gdb_breakpoint_inactive_symbol"
+        eval -buffer %arg{1} %{
+            unset-option buffer gdb_breakpoints_flags
+            %sh{
+                IFS=:
+                for current in $kak_opt_gdb_breakpoints_info; do
+                    buffer="${current#*|*|*|}"
+                    if [ "$buffer" = "$1" ]; then
+                        current="${current#*|}"
+                        enabled="${current%%|*}"
+                        current="${current#*|}"
+                        line="${current%%|*}"
+                        if [ "$enabled" = y ]; then
+                            flag="$kak_opt_gdb_breakpoint_active_symbol"
+                        else
+                            flag="$kak_opt_gdb_breakpoint_inactive_symbol"
+                        fi
+                        printf "set-option -add buffer gdb_breakpoints_flags %s|%s\n" "$line" "$flag"
                     fi
-                    printf "set-option -add \"buffer=%s\" gdb_breakpoints_flags %s|%s\n" "$buffer" "$line" "$flag"
-                fi
-            done
+                done
+            }
         }
     }
 }
