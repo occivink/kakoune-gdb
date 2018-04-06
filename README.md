@@ -48,7 +48,7 @@ The script provides commands for the most common operations; complex ones should
 | `gdb-set-breakpoint` | `break` | set a breakpoint at the cursor location |
 | `gdb-clear-breakpoint` | `clear` | remove any breakpoints at the cursor location |
 | `gdb-toggle-breakpoint` | - | remove or set a breakpoint at the cursor location|
-| `gdb-print` | `print` | print the value of the currently selected expression in an infobox |
+| `gdb-print` | `print` | print the value of the currently selected expression in an infobox (and in the buffer `*gdb-print*` if it exists) |
 | `gdb-backtrace` | `backtrace` | show the callstack in a scratch buffer |
 
 The backtrace view can be navigated using `<ret>` to jump to the selected function.
@@ -74,6 +74,7 @@ You can also use the existing options to further refine your commands. You shoul
 * `gdb_program_running`[bool]: true if the debugged program is currently running (stopped or not)
 * `gdb_program_stopped`[bool]: true if the debugged program is currently running, and stopped
 * `gdb_autojump_client`[str]: if autojump is enabled, the name of the client in which the jump is performed
+* `gdb_print_client`[str]: the name of the client in which the value is printed
 * `gdb_location_info`[str]: if running and stopped, contains the location in the format `line|file`
 * `gdb_breakpoints_info`[str]: contains all known breakpoints in the format `id|enabled|line|file:id|enabled|line|file|:...`
 
@@ -98,7 +99,6 @@ set global modelinefmt '%val{bufname} %val{cursor_line}:%val{cursor_char_column}
 
 ## TODO
 
-* (optionally) put the result of gdb-print into a scratch buffer, in addition to the infobox
 * set temporary/conditional breakpoints
 * handle up/down, and moving the current frame from the backtrace buffer
 * another helper script, that follow the shortcuts of other debuggers

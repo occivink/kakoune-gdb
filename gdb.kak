@@ -20,6 +20,9 @@ declare-option bool gdb_program_running false
 declare-option bool gdb_program_stopped false
 # if not empty, contains the name of client in which the autojump is performed
 declare-option str gdb_autojump_client
+# if not empty, contains the name of client in which the value is printed
+# set by default to the client which started the session
+declare-option str gdb_print_client
 
 # contains all known breakpoints in this format:
 # id|enabled|line|file:id|enabled|line|file|:...
@@ -203,10 +206,10 @@ define-command -hidden gdb-session-connect-internal %{
             }
             /\^done/ {
                 if (printing) {
-                    # QUOTE => \\QUOTE
-                    gsub("'\''", "\\\\'\''", print_value)
-                    # eval -client $client QUOTE info  -- \QUOTE $string \QUOTE QUOTE
-                    send("eval -client '"$kak_client"' '\''info -- \\'\''" print_value "\\'\'\''")
+                    # QUOTE => \QUOTE
+                    gsub("'\''", "\\'\''", print_value)
+                    #gdb-handle-print QUOTE VALUE QUOTE
+                    send("gdb-handle-print '\''" print_value "'\''")
                     printing = 0
                 }
             }
@@ -218,7 +221,8 @@ define-command -hidden gdb-session-connect-internal %{
         printf "set-option global gdb_location_flag '0:0|%${#kak_opt_gdb_location_symbol}s'\n"
         printf "set-option global gdb_breakpoints_flags '0:0|%${#kak_opt_gdb_breakpoint_active_symbol}s'\n"
     }
-    set-option global gdb_started  true
+    set-option global gdb_started true
+    set-option global gdb_print_client %val{client}
     gdb-set-indicator-from-current-state
     hook -group gdb global BufOpenFile .* %{
         gdb-refresh-location-flag %val{buffile}
@@ -248,6 +252,7 @@ define-command gdb-session-stop %{
         set-option global gdb_program_running false
         set-option global gdb_program_stopped false
         set-option global gdb_autojump_client ""
+        set-option global gdb_print_client ""
         set-option global gdb_indicator ""
         set-option global gdb_dir ""
 
@@ -332,7 +337,7 @@ define-command gdb-backtrace %{
         }
         gdb-cmd -stack-list-frames
         eval -try-client %opt{toolsclient} %{
-            edit! -fifo "%opt{gdb_dir}/backtrace" *backtrace*
+            edit! -fifo "%opt{gdb_dir}/backtrace" *gdb-backtrace*
             set buffer filetype backtrace
             set buffer backtrace_current_line 0
             hook -group fifo buffer BufCloseFifo .* %{
@@ -369,7 +374,7 @@ define-command -hidden gdb-backtrace-jump %{
 
 define-command gdb-backtrace-up %{
     eval -try-client %opt{jumpclient} %{
-        buffer *backtrace*
+        buffer *gdb-backtrace*
         exec "%opt{backtrace_current_line}gk<ret>"
         gdb-backtrace-jump
     }
@@ -378,7 +383,7 @@ define-command gdb-backtrace-up %{
 
 define-command gdb-backtrace-down %{
     eval -try-client %opt{jumpclient} %{
-        buffer *backtrace*
+        buffer *gdb-backtrace*
         exec "%opt{backtrace_current_line}gj<ret>"
         gdb-backtrace-jump
     }
@@ -602,9 +607,19 @@ define-command -hidden -params 1 gdb-refresh-breakpoints-flags %{
     }
 }
 
+define-command -hidden gdb-handle-print -params 1 %{
+    try %{
+        eval -buffer *gdb-print* %{
+            set-register '"' %arg{1}
+            exec gep
+            try %{ exec 'ggs\n<ret>d' }
+        }
+    }
+    eval -client %opt{gdb_print_client} 'info %arg{1}'
+}
+
 # clear all breakpoint information internal to kakoune
 define-command -hidden gdb-clear-breakpoints %{
     eval -buffer * %{ unset-option buffer gdb_breakpoints_flags }
     set-option global gdb_breakpoints_info ""
 }
-
