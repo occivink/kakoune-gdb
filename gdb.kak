@@ -9,8 +9,8 @@ declare-option str gdb_breakpoint_active_symbol "●"
 declare-option str gdb_breakpoint_inactive_symbol "○"
 declare-option str gdb_location_symbol "➡"
 
-set-face GdbBreakpoint red,default
-set-face GdbLocation blue,default
+set-face global GdbBreakpoint red,default
+set-face global GdbLocation blue,default
 
 # a debugging session has been started
 declare-option bool gdb_started false
