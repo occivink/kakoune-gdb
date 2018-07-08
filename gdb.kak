@@ -46,8 +46,8 @@ declare-option -hidden line-specs gdb_breakpoints_flags
 declare-option -hidden line-specs gdb_location_flag
 
 addhl shared/gdb group -passes move
-addhl shared/gdb/ flag_lines GdbLocation gdb_location_flag
-addhl shared/gdb/ flag_lines GdbBreakpoint gdb_breakpoints_flags
+addhl shared/gdb/ flag-lines GdbLocation gdb_location_flag
+addhl shared/gdb/ flag-lines GdbBreakpoint gdb_breakpoints_flags
 
 define-command -params .. -file-completion gdb-session-new %{
     gdb-session-connect-internal
