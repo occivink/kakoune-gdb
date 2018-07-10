@@ -32,7 +32,7 @@ declare-option str gdb_location_info
 # note that these variables may reference locations that are not in currently opened buffers
 
 # list of pending commands that will be executed the next time the process is stopped
-declare-option -hidden str-list gdb_pending_commands
+declare-option -hidden str gdb_pending_commands
 
 # a visual indicator showing the current state of the script
 declare-option str gdb_indicator
@@ -480,7 +480,7 @@ define-command -hidden gdb-process-pending-commands %{
         fi
         printf "%s\n" "$kak_opt_gdb_pending_commands" > "$kak_opt_gdb_dir"/input_pipe
     }
-    set-option global gdb_pending_commands 	""
+    set-option global gdb_pending_commands
 }
 
 define-command -hidden gdb-handle-running %{
