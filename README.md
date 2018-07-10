@@ -6,7 +6,7 @@
 
 ## Setup
 
-Add `gdb.kak` to your autoload dir: `~/.config/kak/autoload/`, or source it manually. Optionally, add `gdb-helper.kak` to get higher-level commands meant to simplify the workflow.
+Add `gdb.kak` to your autoload dir: `~/.config/kak/autoload/`, or source it manually.
 
 This script has hard dependencies on `gdb` (>= 7.12) and `socat`, as well as the usual POSIX environment. There is also on optional dependency on `rr`.
 
@@ -55,8 +55,6 @@ The backtrace view can be navigated using `<ret>` to jump to the selected functi
 
 The `gdb-{enable,disable,toggle}-autojump` commands let you control if the current client should jump to the current location when execution is stopped.
 
-The `gdb-helper.kak` script wraps these commands in shortcuts and shows an infobox detailing them. The `gdb-helper` command provides one-off shortcuts, and `gdb-helper-repeat` leaves the shortcuts on until `<esc>` is pressed.
-
 ### Extending the script
 
 This script can be extended by defining your own commands. `gdb-cmd` is provided for that purpose: it simply forwards its arguments to the gdb process. Some of the predefined commands are defined like that:
@@ -97,11 +95,28 @@ It is possible to show in the modeline the status of the plugin using the option
 set global modelinefmt '%val{bufname} %val{cursor_line}:%val{cursor_char_column} {{context_info}} {{mode_info}} {red,default}%opt{gdb_indicator}{default,default}- %val{client}@[%val{session}]'
 ```
 
+To setup "standard" debugger shortcuts, you can use the following snippet:
+```
+hook global GlobalSetOption gdb_started=true %{
+    map global normal <f10>   ': gdb-next<ret>'
+    map global normal <f11>   ': gdb-step<ret>'
+    map global normal <s-f11> ': gdb-finish<ret>'
+    map global normal <f9>    ': gdb-toggle-breakpoint<ret>'
+    map global normal <f5>    ': gdb-continue<ret>'
+}
+hook global GlobalSetOption gdb_started=false %{
+    unmap global normal <f10>   ': gdb-next<ret>'
+    unmap global normal <f11>   ': gdb-step<ret>'
+    unmap global normal <s-f11> ': gdb-finish<ret>'
+    unmap global normal <f9>    ': gdb-toggle-breakpoint<ret>'
+    unmap global normal <f5>    ': gdb-continue<ret>'
+}
+```
+
 ## TODO
 
 * set temporary/conditional breakpoints
 * handle up/down, and moving the current frame from the backtrace buffer
-* another helper script, that follow the shortcuts of other debuggers
 
 ## License
 
