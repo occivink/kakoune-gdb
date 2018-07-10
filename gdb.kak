@@ -217,8 +217,8 @@ define-command -hidden gdb-session-connect-internal %{
         printf "$!" > "${tmpdir}/pid"
         printf "set-option global gdb_dir %s\n" "$tmpdir"
         # put a dummy flag to prevent the columns from jiggling
-        printf "set-option global gdb_location_flag 0 0|%${#kak_opt_gdb_location_symbol}s\n"
-        printf "set-option global gdb_breakpoints_flags 0 0|%${#kak_opt_gdb_breakpoint_active_symbol}s\n"
+        printf "set-option global gdb_location_flag 0 '0|%${#kak_opt_gdb_location_symbol}s'\n"
+        printf "set-option global gdb_breakpoints_flags 0 '0|%${#kak_opt_gdb_breakpoint_active_symbol}s'\n"
     }
     set-option global gdb_started true
     set-option global gdb_print_client %val{client}
@@ -259,7 +259,7 @@ define-command gdb-session-stop %{
             unset-option buffer gdb_location_flag
             unset-option buffer gdb_breakpoint_flags
         }
-        remove-highlighter global/gdb
+        rmhl global/gdb-ref
         remove-hooks global gdb-ref
     }
 }
@@ -480,7 +480,7 @@ define-command -hidden gdb-process-pending-commands %{
         fi
         printf "%s\n" "$kak_opt_gdb_pending_commands" > "$kak_opt_gdb_dir"/input_pipe
     }
-    set-option global gdb_pending_commands
+    set-option global gdb_pending_commands ""
 }
 
 define-command -hidden gdb-handle-running %{
