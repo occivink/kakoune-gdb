@@ -24,7 +24,7 @@ declare-option str gdb_autojump_client
 declare-option str gdb_print_client
 
 # contains all known breakpoints in this format:
-# id|enabled|line|file:id|enabled|line|file|:...
+# id enabled line file id enabled line file  ...
 declare-option str-list gdb_breakpoints_info
 # if execution is currently stopped, contains the location in this format:
 # line file
@@ -397,33 +397,27 @@ define-command gdb-breakpoint-impl -hidden -params 2 %{
         # reduce to cursors so that we can just extract the line out of selections_desc without any hassle
         exec 'gh'
         eval %sh{
-            if [ "$kak_opt_gdb_started" = false ]; then exit; fi
+            [ "$kak_opt_gdb_started" = false ] && exit
             delete="$1"
             create="$2"
             commands=$(
-                # setting IFS is safe here because it's not arbitrary input
-                eval set -- "$kak_opt_gdb_breakpoints_info"
+                # iterating with space-splitting is safe because it's not arbitrary input
+                # lucky me
                 for selection in $kak_selections_desc; do
-                    match=
                     cursor_line=${selection%%.*}
-                    for current_bp in "$@"; do
-                        buffer="${current_bp#*|*|*|}"
-                        if [ "$buffer" = "$kak_buffile" ]; then
-                            line_file="${current_bp#*|*|}"
-                            line="${line_file%%|*}"
-                            if [ "$line" = "$cursor_line" ]; then
-                                match="$current_bp"
-                                break
-                            fi
+                    match_id=
+                    eval set -- "$kak_opt_gdb_breakpoints_info"
+                    while [ $# -ne 0 ]; do
+                        if [ "$4" = "$kak_buffile" ] && [ "$3" = "$cursor_line" ]; then
+                            match_id="$1"
+                            break
                         fi
+                        shift 4
                     done
-                    if [ -n "$match" ]; then
-                        id="${match%%|*}"
-                        [ "$delete" = false ] && continue
-                        printf "delete %s\n" "$id"
+                    if [ -n "$match_id" ]; then
+                        [ "$delete" = true ] && printf "delete %s\n" "$match_id"
                     else
-                        [ "$create" = false ] && continue
-                        printf "break %s:%s\n" "$kak_buffile" "$cursor_line"
+                        [ "$create" = true ] && printf "break %s:%s\n" "$kak_buffile" "$cursor_line"
                     fi
                 done
             )
@@ -449,7 +443,7 @@ define-command -hidden -params 2 gdb-handle-stopped %{
     } catch %{
         set-option global gdb_program_stopped true
         gdb-set-indicator-from-current-state
-        set-option global gdb_location_info  %arg{1} %arg{2} 
+        set-option global gdb_location_info  %arg{1} %arg{2}
         gdb-refresh-location-flag %arg{2}
         try %{ eval -client %opt{gdb_autojump_client} gdb-jump-to-location }
     }
@@ -526,36 +520,36 @@ define-command -hidden -params 4 gdb-handle-breakpoint-created %{
 
 define-command -hidden -params 1 gdb-handle-breakpoint-deleted %{
     eval %sh{
-        to_delete="$1"
+        id_to_delete="$1"
         printf "set global gdb_breakpoints_info\n"
         eval set -- "$kak_opt_gdb_breakpoints_info"
-        for current in "$@"; do
-            id="${current%%|*}"
-            if [ "$id" != "$to_delete" ]; then
-                printf "set -add global gdb_breakpoints_info '%s'\n" "$current"
+        while [ $# -ne 0 ]; do
+            if [ "$1" = "$id_to_delete" ]; then
+                buffer_deleted_from="$4"
             else
-                buffer="${current#*|*|*|}"
+                printf "set -add global gdb_breakpoints_info %s %s %s '%s'\n" "$1" "$2" "$3" "$4"
             fi
+            shift 4
         done
-        printf "gdb-refresh-breakpoints-flags '%s'\n" "$buffer"
+        printf "gdb-refresh-breakpoints-flags '%s'\n" "$buffer_deleted_from"
     }
 }
 
 define-command -hidden -params 4 gdb-handle-breakpoint-modified %{
     eval %sh{
-        id="$1"
+        id_modified="$1"
         active="$2"
         line="$3"
         file="$4"
-        echo "set global gdb_breakpoints_info"
+        printf "set global gdb_breakpoints_info\n"
         eval set -- "$kak_opt_gdb_breakpoints_info"
-        for current in "$@"; do
-            cur_id="${current%%|*}"
-            if [ "$cur_id" != "$id" ]; then
-                printf "set -add global gdb_breakpoints_info '%s'\n" "$current"
+        while [ $# -ne 0 ]; do
+            if [ "$1" = "$id_modified" ]; then
+                printf "set -add global gdb_breakpoints_info %s %s %s '%s'\n" "$id_modified" "$active" "$line" "$file"
             else
-                printf "set -add global gdb_breakpoints_info '%s|%s|%s|%s'\n" "$id" "$active" "$line" "$file"
+                printf "set -add global gdb_breakpoints_info %s %s %s '%s'\n" "$1" "$2" "$3" "$4"
             fi
+            shift 4
         done
     }
     gdb-refresh-breakpoints-flags %arg{4}
@@ -570,20 +564,18 @@ define-command -hidden -params 1 gdb-refresh-breakpoints-flags %{
             eval %sh{
                 to_refresh="$1"
                 eval set -- "$kak_opt_gdb_breakpoints_info"
-                for current in "$@"; do
-                    buffer="${current#*|*|*|}"
-                    if [ "$buffer" = "$to_refresh" ]; then
-                        current="${current#*|}"
-                        enabled="${current%%|*}"
-                        current="${current#*|}"
-                        line="${current%%|*}"
-                        if [ "$enabled" = y ]; then
-                            flag="$kak_opt_gdb_breakpoint_active_symbol"
-                        else
-                            flag="$kak_opt_gdb_breakpoint_inactive_symbol"
-                        fi
-                        printf "set -add buffer gdb_breakpoints_flags '%s|%s'\n" "$line" "$flag"
+                while [ $# -ne 0 ]; do
+                    buffer="$4"
+                    [ "$buffer" != "$to_refresh" ] && continue
+                    line="$3"
+                    enabled="$2"
+                    if [ "$enabled" = y ]; then
+                        flag="$kak_opt_gdb_breakpoint_active_symbol"
+                    else
+                        flag="$kak_opt_gdb_breakpoint_inactive_symbol"
                     fi
+                    printf "set -add buffer gdb_breakpoints_flags '%s|%s'\n" "$line" "$flag"
+                    shift 4
                 done
             }
         }
