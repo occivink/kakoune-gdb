@@ -27,8 +27,8 @@ declare-option str gdb_print_client
 # id|enabled|line|file:id|enabled|line|file|:...
 declare-option str-list gdb_breakpoints_info
 # if execution is currently stopped, contains the location in this format:
-# line|file
-declare-option str gdb_location_info
+# line file
+declare-option str-list gdb_location_info
 # note that these variables may reference locations that are not in currently opened buffers
 
 # list of pending commands that will be executed the next time the process is stopped
@@ -254,7 +254,7 @@ define-command gdb-session-stop %{
         set-option global gdb_dir ""
 
         set-option global gdb_breakpoints_info
-        set-option global gdb_location_info ""
+        set-option global gdb_location_info
         eval -buffer * %{
             unset-option buffer gdb_location_flag
             unset-option buffer gdb_breakpoint_flags
@@ -266,9 +266,10 @@ define-command gdb-session-stop %{
 
 define-command gdb-jump-to-location %{
     eval %sh{
-        [ "$kak_opt_gdb_stopped" = false ] && exit
-        line="${kak_opt_gdb_location_info%%|*}"
-        buffer="${kak_opt_gdb_location_info#*|}"
+        eval set -- "$kak_opt_gdb_location_info"
+        [ $# -eq 0 ] && exit
+        line="$1"
+        buffer="$2"
         printf "edit -existing \"%s\" %s\n" "$buffer" "$line"
     }
 }
@@ -448,7 +449,7 @@ define-command -hidden -params 2 gdb-handle-stopped %{
     } catch %{
         set-option global gdb_program_stopped true
         gdb-set-indicator-from-current-state
-        set-option global gdb_location_info "%arg{1}|%arg{2}"
+        set-option global gdb_location_info  %arg{1} %arg{2} 
         gdb-refresh-location-flag %arg{2}
         try %{ eval -client %opt{gdb_autojump_client} gdb-jump-to-location }
     }
@@ -492,11 +493,12 @@ define-command -hidden gdb-handle-running %{
 
 define-command -hidden gdb-clear-location %{
     eval %sh{
-        [ ! -n "$kak_opt_gdb_location_info" ] && exit
-        buffer="${kak_opt_gdb_location_info#*|}"
-        printf "unset-option \"buffer=%s\" gdb_location_flag\n" "$buffer"
+        eval set -- "$kak_opt_gdb_location_info"
+        [ $# -eq 0 ] && exit
+        buffer="$2"
+        printf "unset 'buffer=%s' gdb_location_flag" "$buffer"
     }
-    set-option global gdb_location_info ""
+    set global gdb_location_info
 }
 
 # refresh the location flag of the buffer passed as argument
@@ -505,26 +507,27 @@ define-command -hidden -params 1 gdb-refresh-location-flag %{
     try %{
         eval -buffer %arg{1} %{
             eval %sh{
-                [ ! -n "$kak_opt_gdb_location_info" ] && exit
-                buffer="${kak_opt_gdb_location_info#*|}"
-                if [ "$1" = "$buffer" ]; then
-                    line="${kak_opt_gdb_location_info%%|*}"
-                    printf "set-option -add buffer gdb_location_flag \"%s|%s\"\n" "$line" "$kak_opt_gdb_location_symbol"
-                fi
+                buffer_to_refresh="$1"
+                eval set -- "$kak_opt_gdb_location_info"
+                [ $# -eq 0 ] && exit
+                buffer_stopped="$2"
+                [ "$buffer_to_refresh" != "$buffer_stopped" ] && exit
+                line_stopped="$1"
+                printf "set -add buffer gdb_location_flag '%s|%s'" "$line_stopped" "$kak_opt_gdb_location_symbol"
             }
         }
     }
 }
 
 define-command -hidden -params 4 gdb-handle-breakpoint-created %{
-    set -add global gdb_breakpoints_info "%arg{1}|%arg{2}|%arg{3}|%arg{4}"
+    set -add global gdb_breakpoints_info %arg{1} %arg{2} %arg{3} %arg{4}
     gdb-refresh-breakpoints-flags %arg{4}
 }
 
 define-command -hidden -params 1 gdb-handle-breakpoint-deleted %{
     eval %sh{
         to_delete="$1"
-        echo "set global gdb_breakpoints_info"
+        printf "set global gdb_breakpoints_info\n"
         eval set -- "$kak_opt_gdb_breakpoints_info"
         for current in "$@"; do
             id="${current%%|*}"
