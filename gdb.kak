@@ -292,6 +292,20 @@ sub breakpoint_to_command {
     }
     return 1;
 }
+sub get_line_file {
+    my $number = shift;
+    my $file = shift;
+    open(my $fh, '\''<'\'', $file) or return 1;
+    while (my $line = <$fh>) {
+        if ($. == $number) {
+            close($fh);
+            $line =~ s/\n$//;
+            return (0, $line);
+        }
+    }
+    close($fh);
+    return 1;
+}
 my $connected = 0;
 my $printing = 0;
 my $print_value = "";
@@ -336,6 +350,29 @@ while (my $input = <STDIN>) {
         ($err, $line) = parse_string($err, $map{"line"});
         ($err, $file) = parse_string($err, $map{"fullname"});
         $err = send_to_kak($err, '\''gdb-clear-location'\'', '\'';'\'', '\''gdb-handle-stopped'\'', $line, escape($file));
+    } elsif ($input =~ /\^done,stack=(.*)$/) {
+        my @array;
+        ($err, @array) = parse_array($err, $1);
+        open(my $fifo, '\''>'\'', "${tmpdir}/backtrace") or next;
+        for my $val (@array) {
+            $val =~ s/^frame=//;
+            my $line = "???";
+            my $file = "???";
+            my $content = "???";
+            my %frame;
+            ($err, %frame) = parse_map($err, $val);
+            if (exists($frame{"line"})) {
+                ($err, $line) = parse_string($err, $frame{"line"});
+            }
+            if (exists($frame{"fullname"})) {
+                ($err, $file) = parse_string($err, $frame{"fullname"});
+            }
+            if ($line ne "???" and $file ne "???") {
+                ($err, $content) = get_line_file($line, $file);
+            }
+            print $fifo "$file:$line:$content\n";
+        }
+        close($fifo);
     } elsif ($input =~ /^=breakpoint-(created|modified),bkpt=(.*)$/) {
         my ($operation, @command);
         $operation = $1;
@@ -518,10 +555,9 @@ define-command gdb-backtrace %{
             addhl buffer/ regex "^([^\n]*?):(\d+)" 1:cyan 2:green
             addhl buffer/ line '%opt{backtrace_current_line}' default+b
             map buffer normal <ret> ': gdb-backtrace-jump<ret>'
-            hook -group fifo buffer BufCloseFifo .* %{
+            hook -always -once buffer BufCloseFifo .* %{
                 nop %sh{ rm -f "$kak_opt_gdb_dir"/backtrace }
-                #exec ged
-                remove-hooks buffer fifo
+                exec ged
             }
         }
     }

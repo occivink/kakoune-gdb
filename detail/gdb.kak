@@ -219,10 +219,9 @@ define-command gdb-backtrace %{
             addhl buffer/ regex "^([^\n]*?):(\d+)" 1:cyan 2:green
             addhl buffer/ line '%opt{backtrace_current_line}' default+b
             map buffer normal <ret> ': gdb-backtrace-jump<ret>'
-            hook -group fifo buffer BufCloseFifo .* %{
+            hook -always -once buffer BufCloseFifo .* %{
                 nop %sh{ rm -f "$kak_opt_gdb_dir"/backtrace }
-                #exec ged
-                remove-hooks buffer fifo
+                exec ged
             }
         }
     }
