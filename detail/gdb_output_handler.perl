@@ -12,108 +12,220 @@ sub escape {
 
 sub send_to_kak {
     my $command = join(' ', @_);
-    print("${command}\n");
-    return;
 
     # what a silly pattern
     my $pid = open(CHILD_STDIN, "|-");
     defined($pid) || die "can't fork: $!";
     $SIG{PIPE} = sub { die "child pipe broke" };
     if ($pid > 0) { # parent
-        print CHILD_STDIN $command;
+        print CHILD_STDIN  $command;
         close(CHILD_STDIN) || warn "child exited $?";
     } else { # child
         exec("kak", "-p", $session) || die "can't exec program: $!";
     }
 }
 
-my $parser_input;
-sub parse_value { 
-    if ($parser_input =~ m/\G("|{|\[)/gc) {
-        if ($1 eq '"') {
-            return parse_string();
-        } elsif ($1 eq '[') {
-            return parse_array();
-        } elsif ($1 eq '{') {
-            return parse_object();
+# this parser could be made a LOT simpler by operating in a single pass
+# but gdb doesn't respect its own grammar so we need to introduce dumb hacks
+# they also won't fix it for backwards-compatibility reasons
+# even though they have MI-versioning, super lame
+
+# dunno if that's proper use of the word 'tokenize' but good enough
+sub tokenize_val {
+    my $ref = shift;
+    my $closer = shift;
+    my $nested_brackets = 0;
+    my $nested_braces = 0;
+    my $res = "";
+    while (1) {
+        if ($$ref !~ m/\G([^",\{\}\[\]]*)([",\{\}\[\]])/gc) {
+            return 1;
+        }
+
+        $res .= $1;
+        if (($2 eq ',' or $2 eq $closer) and ($nested_braces == 0 and $nested_brackets == 0)) {
+            return (0, $res, $2);
+        }
+        $res .= $2;
+
+        if ($2 eq '"') {
+            # advance til end of string, because it may contain brackets, braces or commas
+            while (1) {
+                if ($$ref !~ m/\G([^\\"]*([\\"]))/gc) { return 1; }
+                $res .= $1;
+                if ($2 eq '"') {
+                    last;
+                }
+                # it's a \, absorb the escaped character
+                if ($$ref !~ m/\G(.)/gc) { return 1; }
+                $res .= $1;
+            }
+        } elsif ($2 eq '{') {
+            $nested_braces += 1;
+        } elsif ($2 eq '}') {
+            if ($nested_braces == 0) { return 1; }
+            $nested_braces -= 1;
+        } elsif ($2 eq '[') {
+            $nested_brackets += 1;
+        } elsif ($2 eq ']') {
+            if ($nested_brackets == 0) { return 1; }
+            $nested_brackets -= 1;
+        }
+    }
+}
+
+sub parse_string {
+    my $prev_err = shift;
+    if ($prev_err) { return $prev_err; }
+    my $input = shift;
+    if (not defined($input)) { return 1; }
+    if ($input !~ m/\G"/gc) {
+        return 1;
+    }
+    my $res;
+    while (1) {
+        # copy up to \ or "
+        if ($input !~ m/\G([^\\"]*)([\\"])/gc) {
+            return 1;
+        }
+        $res .= $1;
+        if ($2 eq '\\') {
+            $input =~ m/\G(.)/gc;
+            if ($1 eq "n") {
+                $res .= "\n";
+            } else {
+                $res .= $1;
+            }
+        } elsif ($2 eq '"'){
+            return (0, $res);
+        }
+    }
+}
+
+sub parse_array {
+    my $prev_err = shift;
+    if ($prev_err) { return $prev_err; }
+    my $input = shift;
+    if (not defined($input)) { return 1; }
+    if ($input !~ m/\G\[/gc) {
+        return 1;
+    }
+    my @res;
+    if ($input =~ m/\G]/gc) {
+        return (0, @res);
+    }
+    while (1) {
+        my ($err, $val, $separator) = tokenize_val(\$input, ']');
+        if ($err) { return 1; }
+        push(@res, $val);
+        if ($separator eq ']') {
+            return (0, @res);
         }
     }
     return 1;
 }
-# returns an array, and advances to the character after ]
-sub parse_array {
-    my @res;
-    if ($parser_input =~ m/\G]/gc) {
-        return (0, \@res);
-    }
-    while (1) {
-        my ($err, $val) = parse_value();
-        if ($err) { 
-            return 1; 
-        }
-        push(@res, $val);
-        if ($parser_input =~ m/\G(,|])/gc) {
-            if ($1 eq ']') {
-                return (0, \@res);
-            } elsif ($1 eq ',') {
-                next;
-            }
-        }
-        return 1;
-    }
-}
-# returns a hash, and advances to the character after } (or EOL)
-sub parse_object {
-    my %res;
-    if ($parser_input =~ m/\G}/gc) {
-        return (0, \%res);
-    }
-    while (1) {
-        if ($parser_input =~ m/\G([^=]+)=/gc) {
-            my $key = $1;
-            my ($err, $val) = parse_value();
-            if ($err) { 
-                return 1; 
-            }
-            $res{$key} = $val;
 
-            if ($parser_input =~ m/\G(,|}|\s*$)/gc) {
-                if ($1 eq ',') {
-                    next;
-                } else {
-                    return (0, \%res);
-                } 
-            }
-        }
+sub parse_map {
+    my $prev_err = shift;
+    if ($prev_err) { return $prev_err; }
+    my $input = shift;
+    if (not defined($input)) { return 1; }
+    if ($input !~ m/\G\{/gc) {
         return 1;
     }
-}
-# returns a scalar, and advances to the character after "
-sub parse_string {
-    my $res;
+    my %res;
+    if ($input =~ m/\G}/gc) {
+        return (0, %res);
+    }
     while (1) {
-        # copy up to \ or "
-        if ($parser_input =~ m/\G([^\\"]*)([\\"])/gc) {
-            $res .= $1;
-            if ($2 eq '\\') {
-                $parser_input =~ m/\G(.)/gc;
-                if ($1 eq "n") { 
-                    $res .= "\n";
-                } else {
-                    $res .= $1;
-                }
-            } elsif ($2 eq '"'){
-                return (0, $res);
-            }
-        } else {
-            print("parse 6\n"); return 1;
+        if ($input !~ m/\G([A-Za-z_-]+)=/gc) {
+            return 1;
+        }
+        my $key = $1;
+        my ($err, $val, $separator) = tokenize_val(\$input, '}');
+        if ($err) { return 1; }
+        $res{$key} = $val;
+        if ($separator eq '}') {
+            return (0, %res);
         }
     }
 }
-sub parse_line {
-    $parser_input = '';
-    $parser_input = shift;
-    return parse_object();
+
+# the breakpoint table is the worst offender of not respecing the grammar
+# this function changes the "body" part of it from this :
+#[bkpt={number="3",type="breakpoint",disp="keep",enabled="y",addr="<MULTIPLE>",times="0",original-location="/blabla/test/test.cpp:10"},{number="3.1",enabled="y",addr="0x00005555555548d2",func="main()",file="test.cpp",fullname="/blabla/test/test.cpp",line="10",thread-groups=["i1"]},{number="3.2",enabled="y",addr="0x00005555555548e7",func="__static_initialization_and_destruction_0(int, int)",file="test.cpp",fullname="/blabla/test/test.cpp",line="10",thread-groups=["i1"]},bkpt={number="5",type="breakpoint",disp="keep",enabled="y",addr="<PENDING>",pending="12",times="0",original-location="12"}]
+# to this:
+#[[{number="3",type="breakpoint",disp="keep",enabled="y",addr="<MULTIPLE>",times="0",original-location="/blabla/test/test.cpp:10"},{number="3.1",enabled="y",addr="0x00005555555548d2",func="main()",file="test.cpp",fullname="/blabla/test/test.cpp",line="10",thread-groups=["i1"]},{number="3.2",enabled="y",addr="0x00005555555548e7",func="__static_initialization_and_destruction_0(int, int)",file="test.cpp",fullname="/blabla/test/test.cpp",line="10",thread-groups=["i1"]}],[{number="5",type="breakpoint",disp="keep",enabled="y",addr="<PENDING>",pending="12",times="0",original-location="12"}]]
+# meaning that it groups "multiple" breakpoints by array
+# and gets rid of the stupid "bkpt" key which doesn't belong in an array anyway
+# the grammar does allow arrays to have "keys" but what's even the point of that if you're going to reuse the same key for multiple things?
+sub fixup_breakpoint_table {
+    my $err = shift;
+    if ($err) { return $err; }
+    my @table = @_;
+    my @fixed;
+    my $index = 0;
+    while ($index < scalar(@table)) {
+        my $val = $table[$index];
+
+        # should never occur
+        if ($val !~ m/^bkpt=(.*)$/) { return 1; }
+
+        my $res = '[' . $1;
+        $index += 1;
+        while ($index < scalar(@table)) {
+            my $sub = $table[$index];
+            if ($sub =~ m/^bkpt=/) { last; }
+            $res .= ',' . $sub;
+            $index += 1;
+        }
+        $res .= ']';
+        push(@fixed, $res);
+    }
+    return (0, @fixed);
+}
+
+sub breakpoint_command {
+    my $err = shift;
+    if ($err) { return $err; }
+
+    my $cmd = shift;
+    my $array = shift;
+    my (@bkpt_array, %main_bkpt, $id, $enabled, $line, $file, $addr);
+    ($err, @bkpt_array) = parse_array($err, $array);
+    ($err, %main_bkpt) = parse_map($err, $bkpt_array[0]);
+    ($err, $id) = parse_string($err, $main_bkpt{"number"});
+    ($err, $enabled) = parse_string($err, $main_bkpt{"enabled"});
+
+    my $is_multiple = 0;
+    if (exists($main_bkpt{"addr"})) {
+        ($err, $addr) = parse_string($err, $main_bkpt{"addr"});
+        if ($addr eq "<PENDING>") {
+            return (0, ());
+        } elsif ($addr eq "<MULTIPLE>") {
+             $is_multiple = 1;
+             my $i = 1;
+             while ($i < scalar(@bkpt_array)) {
+                my %sub_bkpt;
+                ($err, %sub_bkpt) = parse_map($err, $bkpt_array[$i]);
+                if (exists($sub_bkpt{"line"}) and exists($sub_bkpt{"fullname"})) {
+                    ($err, $line) = parse_string($err, $sub_bkpt{"line"});
+                    ($err, $file) = parse_string($err, $sub_bkpt{"fullname"});
+
+                    if ($err) { return $err; }
+                    return (0, ($cmd, $id, $enabled, $line, escape($file)));
+                }
+                $i += 1;
+             }
+        }
+    }
+    if (not $is_multiple) {
+        ($err, $line) = parse_string($err, $main_bkpt{"line"});
+        ($err, $file) = parse_string($err, $main_bkpt{"fullname"});
+        if ($err) { return $err; }
+        return (0, ($cmd, $id, $enabled, $line, escape($file)));
+    }
+    return 1;
 }
 
 my $connected = 0;
@@ -121,72 +233,79 @@ my $printing = 0;
 my $print_value = "";
 
 while(my $input = <STDIN>) {
+    my $err = 0;
     if (!$connected) {
         $connected = 1;
-        #open(my $fh, '>', "${tmpdir}/input_pipe") or die;
-        #print($fh, "-gdb-set mi-async on\n");
-        #print($fh, "-break-list\n");
-        #print($fh, "-stack-info-frame\n");
-        #close($fh);
+        open(my $fh, '>', "${tmpdir}/input_pipe") or die;
+        print($fh, "-gdb-set mi-async on\n");
+        print($fh, "-break-list\n");
+        print($fh, "-stack-info-frame\n");
+        close($fh);
     }
     if ($input =~ /^\*running/) {
         send_to_kak('gdb-handle-running');
     } elsif ($input =~ /^\*stopped,(.*)$/) {
-        my ($err, $obj_ref) = parse_line($1);
-        if ($err) { print("1\n"); next; }
-        my $reason = $$obj_ref{"reason"};
-        if (defined($reason) and ($reason eq "exited" or $reason eq "exited-normally" or $reason eq "exited-signalled")) {
-            print("2\n"); next;
+        my (%map, $reason, %frame, $line, $file);
+        ($err, %map) = parse_map($err, '{' . $1 . '}');
+        if (exists $map{"reason"}) {
+            ($err, $reason) = parse_string($err, $map{"reason"});
+            if ($reason eq "exited" or $reason eq "exited-normally" or $reason eq "exited-signalled") {
+                next;
+            }
         }
-        my $frame = $$obj_ref{"frame"};
-        my $line = $$frame{"line"};
-        my $file = $$frame{"fullname"};
+        ($err, %frame) = parse_map($err, $map{"frame"});
+        ($err, $line) = parse_string($err, $frame{"line"});
+        ($err, $file) = parse_string($err, $frame{"fullname"});
         if (defined($line) and defined($file)) {
             send_to_kak('gdb-handle-stopped', $line, escape($file));
         } else {
             send_to_kak('gdb-handle-stopped-unknown');
         }
     } elsif ($input =~ /^=thread-group-exited/) {
-        send_to_kak('gdb-handle-exited')
+        send_to_kak('gdb-handle-exited');
     } elsif ($input =~ /\^done,(frame=.*)$/) {
-        my ($err, $obj_ref) = parse_line($1);
-        if ($err) { print("3\n"); next; }
-        my $line = $$obj_ref{"line"};
-        my $file = $$obj_ref{"fullname"};
-        if (!defined($line) or !defined($file)) { print("4\n"); next; }
+        my (%map, $line, $file);
+        ($err, %map) = parse_map($err, $1);
+        if ($err) { next; }
+        ($err, $line) = parse_string($err, $map{"line"});
+        ($err, $file) = parse_string($err, $map{"fullname"});
+        if (!defined($line) or !defined($file)) { next; }
         send_to_kak('gdb-clear-location', ';', 'gdb-handle-stopped', $line, escape($file));
-    } elsif ($input =~ /\^done,stack=(.*)$/) {
-        #TODO
-    } elsif ($input =~ /^=breakpoint-(created|modified),(.*)$/) {
-        my $operation = $1;
-        # stupid bug: implicit array
-        my $fixed = ($2 =~ s/^(bkpt=)(.*)$/$1\[$2\]/r);
-        my ($err, $obj_ref) = parse_line($fixed);
-        if ($err) { print("5\n"); next; }
-        my $bkpts = $$obj_ref{"bkpt"};
-        my ($id, $enabled, $line, $file);
-        for my $bkpt (@$bkpts) {
-            if (!defined($id)     ) { $id      = $$bkpt{"number"}; }
-            if (!defined($enabled)) { $enabled = $$bkpt{"enabled"}; }
-            if (!defined($line)   ) { $line    = $$bkpt{"line"}; }
-            if (!defined($file)   ) { $file    = $$bkpt{"fullname"}; }
-        }
-        if (defined($id) and defined($enabled) and defined($line) and defined($file)) {
-            send_to_kak("gdb-handle-breakpoint-${operation}", $id, $enabled, $line, escape($file));
-        } else {
-            # possibly pending breakpoint, do something?
-        }
+    #} elsif ($input =~ /\^done,stack=(.*)$/) {
+    #    #TODO
+    } elsif ($input =~ /^=breakpoint-(created|modified),bkpt=(.*)$/) {
+        my ($operation, @command);
+        $operation = $1;
+        # implicit array, add delimiters manually
+        ($err, @command) = breakpoint_command($err, "gdb-handle-breakpoint-$operation", '[' . $2 . ']');
+
+        if (scalar(@command) == 0) { next; }
+        if ($err) { next; }
+        send_to_kak(@command);
     } elsif ($input =~ /^=breakpoint-deleted,(.*)$/) {
-        my ($err, $obj_ref) = parse_line($1);
-        if ($err) { print("9\n"); next; }
-        my $id = $$obj_ref{"id"};
-        if (!defined($id)) { print("10\n"); next; }
+        my (%map, $id);
+        ($err, %map) = parse_map($err, '{' . $1 . '}');
+        ($err, $id)  = parse_string($err, $map{"id"});
         send_to_kak('gdb-handle-breakpoint-deleted', $id);
     } elsif ($input =~ /\^done,BreakpointTable=(.*)$/) {
-        #TODO
+        my (%map, @body, @body_fixed, @command, @subcommand);
+        ($err, %map) = parse_map($err, $1);
+        ($err, @body) = parse_array($err, $map{"body"});
+        ($err, @body_fixed) = fixup_breakpoint_table($err, @body);
+        @command = ('gdb-clear-breakpoints');
+        for my $val (@body_fixed) {
+            ($err, @subcommand) = breakpoint_command($err, 'gdb-handle-breakpoint-created', $val);
+            if (scalar(@subcommand) > 0) {
+                push(@command, ';');
+                push(@command, @subcommand);
+            }
+        }
+        if ($err) { next; }
+        send_to_kak(@command);
     } elsif ($input =~ /^\^error/) {
-        my ($err, $msg) = get_value($input, "msg");
-        if ($err) { print("11\n"); next; }
+        my $msg;
+        ($err, $msg) = get_value($input, "msg");
+        if ($err) { next; }
         send_to_kak('echo', '-debug', escape($msg));
     } elsif ($input =~ /^&"print (.*?)(\\n)?"$/) {
         $print_value = "$1 == ";
@@ -201,7 +320,7 @@ while(my $input = <STDIN>) {
             } else {
                 $append = $1;
             }
-            $print_value .= "${append}\n";
+            $print_value .= "$append\n";
         }
     } elsif ($input =~ /\^done/) {
         if ($printing) {
@@ -224,12 +343,4 @@ while(my $input = <STDIN>) {
 #        print(file ":" line ":" call) > "'"$tmpdir/backtrace"'"
 #    }
 #    close("'"$tmpdir/backtrace"'")
-#}
-#/\^done,BreakpointTable=/ {
-#    command = "gdb-clear-breakpoints"
-#    breakpoints_number = split($0, breakpoints, "bkpt=")
-#    for (i = 2; i <= breakpoints_number; i++) {
-#        command = command "; gdb-handle-breakpoint-created " breakpoint_info(breakpoints[i])
-#    }
-#    send(command)
 #}

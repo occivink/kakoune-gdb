@@ -88,10 +88,10 @@ define-command gdb-session-connect %{
     info "Please instruct gdb to \"new-ui mi3 %opt{gdb_dir}/pty\""
 }
 
-define-command -hidden gdb-session-connect-internal %{
+define-command -hidden gdb-session-connect-internal %§
     gdb-session-stop
-    eval %sh§
-        tmpdir=$(mktemp --tmpdir -d gdb_kak_XXX)
+    eval %sh§§
+        export tmpdir=$(mktemp --tmpdir -d gdb_kak_XXX)
         mkfifo "${tmpdir}/input_pipe"
         {
             # too bad gdb only exposes its new-ui via a pty, instead of simply a socket
@@ -102,7 +102,7 @@ define-command -hidden gdb-session-connect-internal %{
         # put an empty flag of the same width to prevent the columns from jiggling
         printf "set-option global gdb_location_flag 0 '0|%${#kak_opt_gdb_location_symbol}s'\n"
         printf "set-option global gdb_breakpoints_flags 0 '0|%${#kak_opt_gdb_breakpoint_active_symbol}s'\n"
-    §
+    §§
     set-option global gdb_started true
     set-option global gdb_print_client %val{client}
     gdb-set-indicator-from-current-state
@@ -114,7 +114,7 @@ define-command -hidden gdb-session-connect-internal %{
         gdb-session-stop
     }
     addhl global/gdb-ref ref -passes move gdb
-}
+§
 
 define-command gdb-session-stop %{
     try %{
@@ -288,19 +288,17 @@ define-command gdb-breakpoint-impl -hidden -params 2 %{
                 # lucky me
                 for selection in $kak_selections_desc; do
                     cursor_line=${selection%%.*}
-                    match_id=
+                    match_found="false"
                     eval set -- "$kak_opt_gdb_breakpoints_info"
                     while [ $# -ne 0 ]; do
                         if [ "$4" = "$kak_buffile" ] && [ "$3" = "$cursor_line" ]; then
-                            match_id="$1"
-                            break
+                            [ "$delete" = true ] && printf "delete %s\n" "$1"
+                            match_found="true"
                         fi
                         shift 4
                     done
-                    if [ -n "$match_id" ]; then
-                        [ "$delete" = true ] && printf "delete %s\n" "$match_id"
-                    else
-                        [ "$create" = true ] && printf "break %s:%s\n" "$kak_buffile" "$cursor_line"
+                    if [ "$match_found" = false ] && [ "$create" = true ]; then
+                        printf "break %s:%s\n" "$kak_buffile" "$cursor_line"
                     fi
                 done
             )
@@ -369,12 +367,12 @@ define-command -hidden gdb-handle-running %{
 }
 
 define-command -hidden gdb-clear-location %{
-    eval %sh{
+    try %{ eval %sh{
         eval set -- "$kak_opt_gdb_location_info"
         [ $# -eq 0 ] && exit
         buffer="$2"
         printf "unset 'buffer=%s' gdb_location_flag" "$buffer"
-    }
+    }}
     set global gdb_location_info
 }
 
