@@ -6,23 +6,30 @@ my $tmpdir = $ENV{"tmpdir"};
 
 sub escape {
     my $command = shift;
+    if (not defined($command)) { return ''; }
     $command =~ s/'/''/g;
     return "'${command}'";
 }
 
 sub send_to_kak {
+    my $err = shift;
+    if ($err) { return $err; }
     my $command = join(' ', @_);
+
+    #REMOVE
+    print("${command}\n"); return 0;
 
     # what a silly pattern
     my $pid = open(CHILD_STDIN, "|-");
     defined($pid) || die "can't fork: $!";
     $SIG{PIPE} = sub { die "child pipe broke" };
     if ($pid > 0) { # parent
-        print CHILD_STDIN  $command;
-        close(CHILD_STDIN) || warn "child exited $?";
+        print CHILD_STDIN $command;
+        close(CHILD_STDIN) || return 1;
     } else { # child
         exec("kak", "-p", $session) || die "can't exec program: $!";
     }
+    return 0;
 }
 
 # this parser could be made a LOT simpler by operating in a single pass
@@ -185,7 +192,7 @@ sub fixup_breakpoint_table {
     return (0, @fixed);
 }
 
-sub breakpoint_command {
+sub breakpoint_to_command {
     my $err = shift;
     if ($err) { return $err; }
 
@@ -232,61 +239,66 @@ my $connected = 0;
 my $printing = 0;
 my $print_value = "";
 
-while(my $input = <STDIN>) {
+while (my $input = <STDIN>) {
+    # remove crlf and other bs
+    $input =~ s/\s+\z//;
     my $err = 0;
     if (!$connected) {
         $connected = 1;
+        #REMOVE
+        next;
         open(my $fh, '>', "${tmpdir}/input_pipe") or die;
-        print($fh, "-gdb-set mi-async on\n");
-        print($fh, "-break-list\n");
-        print($fh, "-stack-info-frame\n");
+        print $fh "-gdb-set mi-async on\n";
+        print $fh "-break-list\n";
+        print $fh "-stack-info-frame\n";
         close($fh);
     }
     if ($input =~ /^\*running/) {
-        send_to_kak('gdb-handle-running');
+        $err = send_to_kak($err, 'gdb-handle-running');
     } elsif ($input =~ /^\*stopped,(.*)$/) {
-        my (%map, $reason, %frame, $line, $file);
+        my (%map, $reason, %frame, $line, $file, $skip);
         ($err, %map) = parse_map($err, '{' . $1 . '}');
-        if (exists $map{"reason"}) {
+        $skip = 0;
+        if (exists($map{"reason"})) {
             ($err, $reason) = parse_string($err, $map{"reason"});
             if ($reason eq "exited" or $reason eq "exited-normally" or $reason eq "exited-signalled") {
-                next;
+                $skip = 1;
             }
         }
-        ($err, %frame) = parse_map($err, $map{"frame"});
-        ($err, $line) = parse_string($err, $frame{"line"});
-        ($err, $file) = parse_string($err, $frame{"fullname"});
-        if (defined($line) and defined($file)) {
-            send_to_kak('gdb-handle-stopped', $line, escape($file));
-        } else {
-            send_to_kak('gdb-handle-stopped-unknown');
+        if (not $skip) {
+            ($err, %frame) = parse_map($err, $map{"frame"});
+            if (exists($frame{"line"}) and exists($frame{"fullname"})) {
+                ($err, $line) = parse_string($err, $frame{"line"});
+                ($err, $file) = parse_string($err, $frame{"fullname"});
+                $err = send_to_kak($err, 'gdb-handle-stopped', $line, escape($file));
+            } else {
+                $err = send_to_kak($err, 'gdb-handle-stopped-unknown');
+            }
         }
     } elsif ($input =~ /^=thread-group-exited/) {
-        send_to_kak('gdb-handle-exited');
-    } elsif ($input =~ /\^done,(frame=.*)$/) {
+        $err = send_to_kak($err, 'gdb-handle-exited');
+    } elsif ($input =~ /\^done,frame=(.*)$/) {
         my (%map, $line, $file);
         ($err, %map) = parse_map($err, $1);
-        if ($err) { next; }
         ($err, $line) = parse_string($err, $map{"line"});
         ($err, $file) = parse_string($err, $map{"fullname"});
-        if (!defined($line) or !defined($file)) { next; }
-        send_to_kak('gdb-clear-location', ';', 'gdb-handle-stopped', $line, escape($file));
+        $err = send_to_kak($err, 'gdb-clear-location', ';', 'gdb-handle-stopped', $line, escape($file));
     #} elsif ($input =~ /\^done,stack=(.*)$/) {
-    #    #TODO
+    #    #TODO BACKTRACE HANDLING
     } elsif ($input =~ /^=breakpoint-(created|modified),bkpt=(.*)$/) {
         my ($operation, @command);
         $operation = $1;
         # implicit array, add delimiters manually
-        ($err, @command) = breakpoint_command($err, "gdb-handle-breakpoint-$operation", '[' . $2 . ']');
+        ($err, @command) = breakpoint_to_command($err, "gdb-handle-breakpoint-$operation", '[' . $2 . ']');
 
-        if (scalar(@command) == 0) { next; }
-        if ($err) { next; }
-        send_to_kak(@command);
+        if (scalar(@command) > 0) {
+            $err = send_to_kak($err, @command);
+        }
     } elsif ($input =~ /^=breakpoint-deleted,(.*)$/) {
         my (%map, $id);
         ($err, %map) = parse_map($err, '{' . $1 . '}');
         ($err, $id)  = parse_string($err, $map{"id"});
-        send_to_kak('gdb-handle-breakpoint-deleted', $id);
+        $err = send_to_kak($err, 'gdb-handle-breakpoint-deleted', $id);
     } elsif ($input =~ /\^done,BreakpointTable=(.*)$/) {
         my (%map, @body, @body_fixed, @command, @subcommand);
         ($err, %map) = parse_map($err, $1);
@@ -294,53 +306,43 @@ while(my $input = <STDIN>) {
         ($err, @body_fixed) = fixup_breakpoint_table($err, @body);
         @command = ('gdb-clear-breakpoints');
         for my $val (@body_fixed) {
-            ($err, @subcommand) = breakpoint_command($err, 'gdb-handle-breakpoint-created', $val);
+            ($err, @subcommand) = breakpoint_to_command($err, 'gdb-handle-breakpoint-created', $val);
             if (scalar(@subcommand) > 0) {
                 push(@command, ';');
                 push(@command, @subcommand);
             }
         }
-        if ($err) { next; }
-        send_to_kak(@command);
-    } elsif ($input =~ /^\^error/) {
+        $err = send_to_kak($err, @command);
+    } elsif ($input =~ /^\^error,msg=(.*)$/) {
         my $msg;
-        ($err, $msg) = get_value($input, "msg");
-        if ($err) { next; }
-        send_to_kak('echo', '-debug', escape($msg));
+        ($err, $msg) = parse_string($err, $1);
+        $err = send_to_kak($err, "echo", "-debug", "[gdb]", escape($msg));
+    #TODO refactor this to not use the 'print' command
     } elsif ($input =~ /^&"print (.*?)(\\n)?"$/) {
         $print_value = "$1 == ";
         $printing = 1;
     } elsif ($input =~ /^~"(.*?)(\\n)?"$/) {
-        if ($printing) {
-            my $append;
-            if ($printing == 1) {
-                $1 =~ m/\$\d+ = (.*)$/;
-                $append = $1;
-                $printing = 2;
-            } else {
-                $append = $1;
+        if (not $printing) { next };
+        if ($1 eq '') { next; }
+        my $append;
+        if ($printing == 1) {
+            $1 =~ m/\$\d+ = (.*)$/;
+            $append = $1;
+            $printing = 2;
+        } else {
+            if ($print_value ne '') {
+                $print_value .= "\n";
             }
-            $print_value .= "$append\n";
+            $append = $1;
         }
+        $print_value .= "$append";
     } elsif ($input =~ /\^done/) {
-        if ($printing) {
-            send_to_kak("gdb-handle-print", escape($print_value));
-            $printing = 0;
-            $print_value = "";
-        }
+        if (not $printing) { next; }
+        $err = send_to_kak($err, "gdb-handle-print", escape($print_value));
+        $printing = 0;
+        $print_value = "";
+    }
+    if ($err) {
+        send_to_kak(0, "echo", "-debug", "[kakoune-gdb]", escape("Internal error handling this output: $input"));
     }
 }
-
-#/\^done,stack=/ {
-#    frames_number = split($0, frames, "frame=")
-#    for (i = 2; i <= frames_number; i++) {
-#        frame = frames[i]
-#        file = get(frame, "fullname=\"", "[^\"]*", "\"")
-#        line = get(frame, "line=\"", "[0-9]+", "\"")
-#        cmd = "awk \"NR==" line "\" \"" file "\""
-#        cmd | getline call
-#        close(cmd)
-#        print(file ":" line ":" call) > "'"$tmpdir/backtrace"'"
-#    }
-#    close("'"$tmpdir/backtrace"'")
-#}

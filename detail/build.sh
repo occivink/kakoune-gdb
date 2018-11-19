@@ -4,6 +4,10 @@ cd $(dirname $(readlink -f "$0"))
 kak -n -ui dummy -e '
 try %{
    edit gdb_output_handler.perl
+   # remove lines preceded by a #REMOVE comment
+   try %{
+       exec %{ %<a-s><a-k>^\s*#REMOVE$<ret>xd }
+   }
    # remove comments and empty lines
    try %{
        exec %{ %<a-s><a-k>(^\s*#|\A\s*\z)<ret>d }
@@ -13,7 +17,7 @@ try %{
    try %{
        exec %{ %s'\''<ret>yPpi\<esc> }
    }
-   # double-up § characters twice, not that there is much chance to find any
+   # double-up § characters (twice), not that there is much chance to find any
    try %{
        exec %{ %s§<ret>y3P }
    }

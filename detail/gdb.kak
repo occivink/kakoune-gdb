@@ -85,7 +85,7 @@ define-command rr-session-new %{
 
 define-command gdb-session-connect %{
     gdb-session-connect-internal
-    info "Please instruct gdb to \"new-ui mi3 %opt{gdb_dir}/pty\""
+    info "Please instruct gdb to ""new-ui mi3 %opt{gdb_dir}/pty"""
 }
 
 define-command -hidden gdb-session-connect-internal %§
@@ -471,7 +471,7 @@ define-command -hidden gdb-handle-print -params 1 %{
             try %{ exec 'ggs\n<ret>d' }
         }
     }
-    eval -client %opt{gdb_print_client} 'info %arg{1}'
+    try %{ eval -client %opt{gdb_print_client} 'info %arg{1}' }
 }
 
 # clear all breakpoint information internal to kakoune
