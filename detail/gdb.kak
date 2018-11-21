@@ -91,11 +91,16 @@ define-command gdb-session-connect %{
 define-command -hidden gdb-session-connect-internal %§
     gdb-session-stop
     eval %sh§§
+        if ! command -v socat >/dev/null 2>&1 || ! command -v perl >/dev/null 2>&1; then
+            printf "fail '''socat'' and ''perl'' must be installed to use this plugin'"
+            exit
+        fi
         export tmpdir=$(mktemp --tmpdir -d gdb_kak_XXX)
         mkfifo "${tmpdir}/input_pipe"
         {
             # too bad gdb only exposes its new-ui via a pty, instead of simply a socket
-            tail -n +1 -f "${tmpdir}/input_pipe" | socat "pty,link=${tmpdir}/pty" STDIO,nonblock=1 | perl -e '!!PLACEHOLDER!!'
+            tail -n +1 -f "${tmpdir}/input_pipe" | socat "pty,link=${tmpdir}/pty" STDIO,nonblock=1 | perl -e '
+!!PLACEHOLDER!!'
         } 2>/dev/null >/dev/null &
         printf "$!" > "${tmpdir}/pid"
         printf "set-option global gdb_dir '%s'\n" "$tmpdir"
