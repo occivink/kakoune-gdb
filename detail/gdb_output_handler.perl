@@ -251,8 +251,6 @@ sub get_line_file {
 }
 
 my $connected = 0;
-my $printing = 0;
-my $print_value = "";
 
 while (my $input = <STDIN>) {
     # remove crlf and other bs
@@ -353,30 +351,10 @@ while (my $input = <STDIN>) {
         my $msg;
         ($err, $msg) = parse_string($err, $1);
         $err = send_to_kak($err, "echo", "-debug", "[gdb]", escape($msg));
-    #TODO refactor this to not use the 'print' command
-    } elsif ($input =~ /^&"print (.*?)(\\n)?"$/) {
-        $print_value = "$1 == ";
-        $printing = 1;
-    } elsif ($input =~ /^~"(.*?)(\\n)?"$/) {
-        if (not $printing) { next };
-        if ($1 eq '') { next; }
-        my $append;
-        if ($printing == 1) {
-            $1 =~ m/\$\d+ = (.*)$/;
-            $append = $1;
-            $printing = 2;
-        } else {
-            if ($print_value ne '') {
-                $print_value .= "\n";
-            }
-            $append = $1;
-        }
-        $print_value .= "$append";
-    } elsif ($input =~ /\^done/) {
-        if (not $printing) { next; }
-        $err = send_to_kak($err, "gdb-handle-print", escape($print_value));
-        $printing = 0;
-        $print_value = "";
+    } elsif ($input =~ /^\^done,value=(.*)$/){
+        my $val;
+        ($err, $val) = parse_string($err, $1);
+        $err = send_to_kak($err, "gdb-handle-print", escape($val));
     }
     if ($err) {
         send_to_kak(0, "echo", "-debug", "[kakoune-gdb]", escape("Internal error handling this output: $input"));

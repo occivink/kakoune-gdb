@@ -307,8 +307,6 @@ sub get_line_file {
     return 1;
 }
 my $connected = 0;
-my $printing = 0;
-my $print_value = "";
 while (my $input = <STDIN>) {
     $input =~ s/\s+\z//;
     my $err = 0;
@@ -403,29 +401,10 @@ while (my $input = <STDIN>) {
         my $msg;
         ($err, $msg) = parse_string($err, $1);
         $err = send_to_kak($err, "echo", "-debug", "[gdb]", escape($msg));
-    } elsif ($input =~ /^&"print (.*?)(\\n)?"$/) {
-        $print_value = "$1 == ";
-        $printing = 1;
-    } elsif ($input =~ /^~"(.*?)(\\n)?"$/) {
-        if (not $printing) { next };
-        if ($1 eq '\'''\'') { next; }
-        my $append;
-        if ($printing == 1) {
-            $1 =~ m/\$\d+ = (.*)$/;
-            $append = $1;
-            $printing = 2;
-        } else {
-            if ($print_value ne '\'''\'') {
-                $print_value .= "\n";
-            }
-            $append = $1;
-        }
-        $print_value .= "$append";
-    } elsif ($input =~ /\^done/) {
-        if (not $printing) { next; }
-        $err = send_to_kak($err, "gdb-handle-print", escape($print_value));
-        $printing = 0;
-        $print_value = "";
+    } elsif ($input =~ /^\^done,value=(.*)$/){
+        my $val;
+        ($err, $val) = parse_string($err, $1);
+        $err = send_to_kak($err, "gdb-handle-print", escape($val));
     }
     if ($err) {
         send_to_kak(0, "echo", "-debug", "[kakoune-gdb]", escape("Internal error handling this output: $input"));
@@ -511,13 +490,17 @@ define-command gdb-set-breakpoint    %{ gdb-breakpoint-impl false true }
 define-command gdb-clear-breakpoint  %{ gdb-breakpoint-impl true false }
 define-command gdb-toggle-breakpoint %{ gdb-breakpoint-impl true true }
 
+# gdb doesn't tell us in its output what was the expression we asked for, so keep it internally for printing later
+declare-option -hidden str gdb_expression_demanded
+
 define-command gdb-print -params ..1 %{
     try %{
         eval %sh{ [ -z "$1" ] && printf fail }
-        gdb-cmd "print %arg{1}"
+        set global gdb_expression_demanded %arg{1}
     } catch %{
-        gdb-cmd "print %val{selection}"
+        set global gdb_expression_demanded %val{selection}
     }
+    gdb-cmd "-data-evaluate-expression ""%opt{gdb_expression_demanded}"""
 }
 
 define-command gdb-enable-autojump %{
@@ -801,12 +784,12 @@ define-command -hidden -params 1 gdb-refresh-breakpoints-flags %{
 define-command -hidden gdb-handle-print -params 1 %{
     try %{
         eval -buffer *gdb-print* %{
-            set-register '"' %arg{1}
+            set-register '"' "%opt{gdb_expression_demanded} == %arg{1}"
             exec gep
             try %{ exec 'ggs\n<ret>d' }
         }
     }
-    try %{ eval -client %opt{gdb_print_client} 'info %arg{1}' }
+    try %{ eval -client %opt{gdb_print_client} 'info "%opt{gdb_expression_demanded} == %arg{1}"' }
 }
 
 # clear all breakpoint information internal to kakoune

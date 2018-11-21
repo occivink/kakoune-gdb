@@ -175,13 +175,17 @@ define-command gdb-set-breakpoint    %{ gdb-breakpoint-impl false true }
 define-command gdb-clear-breakpoint  %{ gdb-breakpoint-impl true false }
 define-command gdb-toggle-breakpoint %{ gdb-breakpoint-impl true true }
 
+# gdb doesn't tell us in its output what was the expression we asked for, so keep it internally for printing later
+declare-option -hidden str gdb_expression_demanded
+
 define-command gdb-print -params ..1 %{
     try %{
         eval %sh{ [ -z "$1" ] && printf fail }
-        gdb-cmd "print %arg{1}"
+        set global gdb_expression_demanded %arg{1}
     } catch %{
-        gdb-cmd "print %val{selection}"
+        set global gdb_expression_demanded %val{selection}
     }
+    gdb-cmd "-data-evaluate-expression ""%opt{gdb_expression_demanded}"""
 }
 
 define-command gdb-enable-autojump %{
@@ -465,12 +469,12 @@ define-command -hidden -params 1 gdb-refresh-breakpoints-flags %{
 define-command -hidden gdb-handle-print -params 1 %{
     try %{
         eval -buffer *gdb-print* %{
-            set-register '"' %arg{1}
+            set-register '"' "%opt{gdb_expression_demanded} == %arg{1}"
             exec gep
             try %{ exec 'ggs\n<ret>d' }
         }
     }
-    try %{ eval -client %opt{gdb_print_client} 'info %arg{1}' }
+    try %{ eval -client %opt{gdb_print_client} 'info "%opt{gdb_expression_demanded} == %arg{1}"' }
 }
 
 # clear all breakpoint information internal to kakoune
