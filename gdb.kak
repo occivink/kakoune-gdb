@@ -463,13 +463,13 @@ define-command gdb-session-stop %{
 }
 
 define-command gdb-jump-to-location %{
-    eval %sh{
+    try %{ eval %sh{
         eval set -- "$kak_opt_gdb_location_info"
         [ $# -eq 0 ] && exit
         line="$1"
         buffer="$2"
-        printf "edit -existing \"%s\" %s\n" "$buffer" "$line"
-    }
+        printf "edit -existing '%s' %s; exec gi" "$buffer" "$line"
+    }}
 }
 
 define-command -params 1.. gdb-cmd %{
