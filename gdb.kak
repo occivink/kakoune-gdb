@@ -765,15 +765,16 @@ define-command -hidden -params 1 gdb-refresh-breakpoints-flags %{
                 eval set -- "$kak_opt_gdb_breakpoints_info"
                 while [ $# -ne 0 ]; do
                     buffer="$4"
-                    [ "$buffer" != "$to_refresh" ] && continue
-                    line="$3"
-                    enabled="$2"
-                    if [ "$enabled" = y ]; then
-                        flag="$kak_opt_gdb_breakpoint_active_symbol"
-                    else
-                        flag="$kak_opt_gdb_breakpoint_inactive_symbol"
+                    if [ "$buffer" = "$to_refresh" ]; then
+                        line="$3"
+                        enabled="$2"
+                        if [ "$enabled" = y ]; then
+                            flag="$kak_opt_gdb_breakpoint_active_symbol"
+                        else
+                            flag="$kak_opt_gdb_breakpoint_inactive_symbol"
+                        fi
+                        printf "set -add buffer gdb_breakpoints_flags '%s|%s'\n" "$line" "$flag"
                     fi
-                    printf "set -add buffer gdb_breakpoints_flags '%s|%s'\n" "$line" "$flag"
                     shift 4
                 done
             }
