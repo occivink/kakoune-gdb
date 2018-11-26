@@ -1,7 +1,7 @@
 # script summary:
 # a long running shell process starts a gdb session (or connects to an existing one) and handles input/output
 # kakoune -> gdb communication is done by writing the gdb commands to a fifo
-# gdb -> kakoune communication is done by an awk process that translates gdb events into kakoune commands
+# gdb -> kakoune communication is done by a perl process that translates gdb events into kakoune commands
 # the gdb-handle-* commands act upon gdb notifications to update the kakoune state
 
 declare-option str gdb_breakpoint_active_symbol "●"

@@ -22,11 +22,10 @@ try %{
        exec %{ %s§<ret>y3P }
    }
    exec -save-regs "" %{ %y }
-   edit gdb.kak
+   edit gdb.kak.tmp
    exec %{ %s!!PLACEHOLDER!!<ret>R }
    write -sync ../gdb.kak
    quit! 0
 } catch %{
    quit! 1
-        
 }'
