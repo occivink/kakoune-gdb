@@ -67,14 +67,14 @@ define-command gdb-finish            %{ gdb-cmd -exec-finish }
 define-command gdb-continue          %{ gdb-cmd -exec-continue }
 ```
 
-You can also use the existing options to further refine your commands. You should treat these as read-only, modifying them is not supported.
-* `gdb_started`[bool]: true if a debugging session has been started
-* `gdb_program_running`[bool]: true if the debugged program is currently running (stopped or not)
-* `gdb_program_stopped`[bool]: true if the debugged program is currently running, and stopped
-* `gdb_autojump_client`[str]: if autojump is enabled, the name of the client in which the jump is performed
-* `gdb_print_client`[str]: the name of the client in which the value is printed
-* `gdb_location_info`[str]: if running and stopped, contains the location in the format `line|file`
-* `gdb_breakpoints_info`[str]: contains all known breakpoints in the format `id|enabled|line|file:id|enabled|line|file|:...`
+You can also use the existing options to further refine your commands. Some of these are read-only (`[R]`), some can also be written to (`[RW]`).
+* `gdb_started`[bool][R]        : true if a debugging session has been started
+* `gdb_program_running`[bool][R]: true if the debugged program is currently running (stopped or not)
+* `gdb_program_stopped`[bool][R]: true if the debugged program is currently running, and stopped
+* `gdb_autojump_client`[str][RW]: if autojump is enabled, the name of the client in which the jump is performed
+* `gdb_print_client`[str][RW]   : the name of the client in which the value is printed
+* `gdb_location_info`[str][R]   : if running and stopped, contains the location in the format `line` `file`
+* `gdb_breakpoints_info`[str][R]: contains all known breakpoints in the format `id1` `enabled1` `line1` `file1` `id2` `enabled2` `line2` `file2` ...
 
 ### Customization
 
