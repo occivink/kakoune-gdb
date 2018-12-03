@@ -116,7 +116,9 @@ def -hidden gdb-session-connect-internal %§
         mkfifo "${tmpdir}/input_pipe"
         {
             # too bad gdb only exposes its new-ui via a pty, instead of simply a socket
-            tail -n +1 -f "${tmpdir}/input_pipe" | socat "pty,wait-slave,link=${tmpdir}/pty" STDIO,nonblock=1 | perl -e '
+            # the 'wait-slave' argument makes socat exit when the other end of the pty (gdb) exits, which is exactly what we want
+            # 'setsid socat' allows us to ignore any ctrl+c sent from kakoune
+            tail -n +1 -f "${tmpdir}/input_pipe" | setsid socat "pty,wait-slave,link=${tmpdir}/pty" STDIO,nonblock=1 | perl -e '
 use strict;
 use warnings;
 my $session = $ENV{"kak_session"};
@@ -437,7 +439,7 @@ while (my $input = <STDIN>) {
             rm -f "${tmpdir}/input_pipe"
             rmdir "$tmpdir"
             printf "gdb-handle-perl-exited '%s'" "${tmpdir}" | kak -p $kak_session
-        } 2>/dev/null >/dev/null &
+        } > /dev/null 2>&1 < /dev/null &
         printf "set global gdb_dir '%s'\n" "$tmpdir"
         # put an empty flag of the same width to prevent the columns from jiggling
         printf "set global gdb_location_flag 0 '0|%${#kak_opt_gdb_location_symbol}s'\n"
