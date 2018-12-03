@@ -479,8 +479,10 @@ def -params 1 gdb-cmd %{
 }
 
 def gdb-session-stop      %{ gdb-cmd "-gdb-exit" }
-def gdb-run -params ..    %{ gdb-cmd "-exec-run %arg{@}" }
-def gdb-start -params ..  %{ gdb-cmd "-exec-run --start %arg{@}" }
+def gdb-run -params ..    %{ gdb-cmd "-exec-arguments %arg{@}
+-exec-run" }
+def gdb-start -params ..  %{ gdb-cmd "-exec-arguments %arg{@}
+-exec-run --start" }
 def gdb-step              %{ gdb-cmd "-exec-step" }
 def gdb-next              %{ gdb-cmd "-exec-next" }
 def gdb-finish            %{ gdb-cmd "-exec-finish" }
