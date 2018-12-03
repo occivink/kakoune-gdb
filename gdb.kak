@@ -466,24 +466,23 @@ def gdb-jump-to-location %{
     }}
 }
 
-def -params 1.. gdb-cmd %{
+def -params 1 gdb-cmd %{
     eval %sh{
         if [ "$kak_opt_gdb_started" = false ] || [ ! -p "$kak_opt_gdb_dir"/input_pipe ]; then
             printf "fail 'This command must be executed in a gdb session'"
             exit
         fi
-        IFS=' '
-        printf %s\\n "$*"  > "$kak_opt_gdb_dir"/input_pipe
+        printf %s\\n "$1"  > "$kak_opt_gdb_dir"/input_pipe
     }
 }
 
-def gdb-session-stop      %{ gdb-cmd -gdb-exit }
-def gdb-run -params ..    %{ gdb-cmd -exec-run %arg{@} }
-def gdb-start -params ..  %{ gdb-cmd -exec-run --start %arg{@} }
-def gdb-step              %{ gdb-cmd -exec-step }
-def gdb-next              %{ gdb-cmd -exec-next }
-def gdb-finish            %{ gdb-cmd -exec-finish }
-def gdb-continue          %{ gdb-cmd -exec-continue }
+def gdb-session-stop      %{ gdb-cmd "-gdb-exit" }
+def gdb-run -params ..    %{ gdb-cmd "-exec-run %arg{@}" }
+def gdb-start -params ..  %{ gdb-cmd "-exec-run --start %arg{@}" }
+def gdb-step              %{ gdb-cmd "-exec-step" }
+def gdb-next              %{ gdb-cmd "-exec-next" }
+def gdb-finish            %{ gdb-cmd "-exec-finish" }
+def gdb-continue          %{ gdb-cmd "-exec-continue" }
 def gdb-set-breakpoint    %{ gdb-breakpoint-impl false true }
 def gdb-clear-breakpoint  %{ gdb-breakpoint-impl true false }
 def gdb-toggle-breakpoint %{ gdb-breakpoint-impl true true }
@@ -498,7 +497,7 @@ def gdb-print -params ..1 %{
     } catch %{
         set global gdb_expression_demanded %val{selection}
     }
-    gdb-cmd "-data-evaluate-expression ""%opt{gdb_expression_demanded}"""
+    gdb-cmd "-data-evaluate-expression '%opt{gdb_expression_demanded}'"
 }
 
 def gdb-enable-autojump %{
@@ -529,7 +528,7 @@ def gdb-backtrace %{
             [ "$kak_opt_gdb_stopped" = false ] && printf fail
             mkfifo "$kak_opt_gdb_dir"/backtrace
         }
-        gdb-cmd -stack-list-frames
+        gdb-cmd '-stack-list-frames'
         eval -try-client %opt{toolsclient} %{
             edit! -fifo "%opt{gdb_dir}/backtrace" *gdb-backtrace*
             set buffer backtrace_current_line 0
