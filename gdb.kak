@@ -99,7 +99,7 @@ define-command -hidden gdb-session-connect-internal %§
         mkfifo "${tmpdir}/input_pipe"
         {
             # too bad gdb only exposes its new-ui via a pty, instead of simply a socket
-            tail -n +1 -f "${tmpdir}/input_pipe" | socat "pty,link=${tmpdir}/pty" STDIO,nonblock=1 | perl -e '
+            tail -n +1 -f "${tmpdir}/input_pipe" | socat "pty,wait-slave,link=${tmpdir}/pty" STDIO,nonblock=1 | perl -e '
 use strict;
 use warnings;
 my $session = $ENV{"kak_session"};
@@ -416,8 +416,11 @@ while (my $input = <STDIN>) {
     }
 }
 '
+            # when the perl program finishes (crashed or gdb closed the pty), cleanup and tell kakoune to stop the session
+            rm -f "${tmpdir}/input_pipe"
+            rmdir "$tmpdir"
+            printf "gdb-handle-perl-exited '%s'" "${tmpdir}" | kak -p $kak_session
         } 2>/dev/null >/dev/null &
-        printf "$!" > "${tmpdir}/pid"
         printf "set-option global gdb_dir '%s'\n" "$tmpdir"
         # put an empty flag of the same width to prevent the columns from jiggling
         printf "set-option global gdb_location_flag 0 '0|%${#kak_opt_gdb_location_symbol}s'\n"
@@ -439,20 +442,13 @@ while (my $input = <STDIN>) {
 define-command gdb-session-stop %{
     try %{
         eval %sh{ [ "$kak_opt_gdb_started" = false ] && printf fail }
-        gdb-cmd quit
-        nop %sh{
-            #TODO: this might not be posix-compliant
-            kill $(ps -o pid= --ppid $(cat "${kak_opt_gdb_dir}/pid"))
-            rm -f "${kak_opt_gdb_dir}/pid" "${kak_opt_gdb_dir}/input_pipe"
-            rmdir "$kak_opt_gdb_dir"
-        }
+        # this *shouldn't* fail
+        gdb-cmd -gdb-exit
 
         # thoroughly clean all options
         set-option global gdb_started false
         set-option global gdb_program_running false
         set-option global gdb_program_stopped false
-        set-option global gdb_autojump_client ""
-        set-option global gdb_print_client ""
         set-option global gdb_indicator ""
         set-option global gdb_dir ""
 
@@ -478,8 +474,11 @@ define-command gdb-jump-to-location %{
 }
 
 define-command -params 1.. gdb-cmd %{
-    nop %sh{
-        [ "$kak_opt_gdb_started" = false ] && exit
+    eval %sh{
+        if [ "$kak_opt_gdb_started" = false ] || [ ! -p "$kak_opt_gdb_dir"/input_pipe ]; then
+            printf "fail 'This command must be executed in a gdb session'"
+            exit
+        fi
         IFS=' '
         printf %s\\n "$*"  > "$kak_opt_gdb_dir"/input_pipe
     }
@@ -802,4 +801,27 @@ define-command -hidden gdb-handle-print -params 1 %{
 define-command -hidden gdb-clear-breakpoints %{
     eval -buffer * %{ unset-option buffer gdb_breakpoints_flags }
     set-option global gdb_breakpoints_info
+}
+
+define-command -hidden gdb-handle-perl-exited -params 1 %{
+    try %{
+        # only do this if the session that exited is the current one
+        eval %sh{ [ "$kak_opt_gdb_dir" != "$1" ] && printf fail }
+
+        # thoroughly clean all options
+        set-option global gdb_started false
+        set-option global gdb_program_running false
+        set-option global gdb_program_stopped false
+        set-option global gdb_indicator ""
+        set-option global gdb_dir ""
+
+        set-option global gdb_breakpoints_info
+        set-option global gdb_location_info
+        eval -buffer * %{
+            unset-option buffer gdb_location_flag
+            unset-option buffer gdb_breakpoint_flags
+        }
+        rmhl global/gdb-ref
+        remove-hooks global gdb-ref
+    }
 }
