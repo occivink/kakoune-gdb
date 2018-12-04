@@ -299,7 +299,7 @@ while (my $input = <STDIN>) {
     } elsif ($input =~ /\^done,stack=(.*)$/) {
         my @array;
         ($err, @array) = parse_array($err, $1);
-        open(my $fifo, '>', "${tmpdir}/backtrace") or next;
+        open(my $fifo, ">>", "${tmpdir}/backtrace") or next;
         for my $val (@array) {
             $val =~ s/^frame=//;
             my $line = "???";

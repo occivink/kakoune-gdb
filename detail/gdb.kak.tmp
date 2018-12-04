@@ -213,6 +213,7 @@ decl -hidden int backtrace_current_line
 
 def gdb-backtrace %{
     try %{
+        try %{ db *gdb-backtrace* }
         eval %sh{
             [ "$kak_opt_gdb_stopped" = false ] && printf fail
             mkfifo "$kak_opt_gdb_dir"/backtrace
