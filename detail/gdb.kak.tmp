@@ -127,8 +127,11 @@ def -hidden gdb-session-connect-internal %§
         } > /dev/null 2>&1 < /dev/null &
         printf "set global gdb_dir '%s'\n" "$tmpdir"
         # put an empty flag of the same width to prevent the columns from jiggling
-        printf "set global gdb_location_flag 0 '0|%${#kak_opt_gdb_location_symbol}s'\n"
-        printf "set global gdb_breakpoints_flags 0 '0|%${#kak_opt_gdb_breakpoint_active_symbol}s'\n"
+        # TODO: support double-width characters
+        location_len=$(printf %s "$kak_opt_gdb_location_symbol" | wc -m)
+        break_len=$(printf %s "$kak_opt_gdb_breakpoint_active_symbol" | wc -m)
+        printf "set global gdb_location_flag 0 '0|%${location_len}s'\n"
+        printf "set global gdb_breakpoints_flags 0 '0|%${break_len}s'\n"
     §§
     set global gdb_started true
     set global gdb_print_client %val{client}
