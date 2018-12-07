@@ -230,7 +230,6 @@ def gdb-backtrace %{
             map buffer normal <ret> ': gdb-backtrace-jump<ret>'
             hook -always -once buffer BufCloseFifo .* %{
                 nop %sh{ rm -f "$kak_opt_gdb_dir"/backtrace }
-                exec ged
             }
         }
     }
