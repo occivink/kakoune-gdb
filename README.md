@@ -22,6 +22,8 @@ There are multiple ways to do this, detailed below:
 If you wish to start a new debugging session, you should call `gdb-session-new`. A new gdb instance will be started, already connected to kakoune.
 Any additional command parameters will be passed to gdb (in particular, the executable you wish to debug).
 
+If you wish to use a different program than `gdb` (for example a wrapper script like `rust-gdb`), you can set the `gdb_program` option.
+
 #### Using rr
 
 If you use [rr](http://rr-project.org/), you can call `rr-session-new`. A new gdb instance will be started with the latest rr recording.

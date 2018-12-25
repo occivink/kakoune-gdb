@@ -1,3 +1,7 @@
+# override to allow starting wrapper scripts
+# they must be compatible with gdb arguments
+decl str gdb_program "gdb"
+
 # script summary:
 # a long running shell process starts a gdb session (or connects to an existing one) and handles input/output
 # kakoune -> gdb communication is done by writing the gdb commands to a fifo
@@ -58,10 +62,10 @@ def -params .. -file-completion gdb-session-new %{
         done
         if [ -n "$TMUX" ]; then
             tmux split-window -h " \
-                gdb $@ --init-eval-command=\"new-ui mi3 ${kak_opt_gdb_dir}/pty\""
+                $kak_opt_gdb_program $@ --init-eval-command=\"new-ui mi3 ${kak_opt_gdb_dir}/pty\""
         elif [ -n "$WINDOWID" ]; then
-            setsid -w $kak_opt_termcmd " \
-                gdb $@ --init-eval-command=\"new-ui mi3 ${kak_opt_gdb_dir}/pty\"" 2>/dev/null >/dev/null &
+            setsid $kak_opt_termcmd " \
+                $kak_opt_gdb_program $@ --init-eval-command=\"new-ui mi3 ${kak_opt_gdb_dir}/pty\"" 2>/dev/null >/dev/null &
         fi
     }
 }
@@ -77,7 +81,7 @@ def rr-session-new %{
             tmux split-window -h " \
                 rr replay -o --init-eval-command=\"new-ui mi3 ${kak_opt_gdb_dir}/pty\""
         elif [ -n "$WINDOWID" ]; then
-            setsid -w $kak_opt_termcmd " \
+            setsid $kak_opt_termcmd " \
                 rr replay -o --init-eval-command=\"new-ui mi3 ${kak_opt_gdb_dir}/pty\"" 2>/dev/null >/dev/null &
         fi
     }
@@ -442,7 +446,7 @@ while (my $input = <STDIN>) {
         } > /dev/null 2>&1 < /dev/null &
         printf "set global gdb_dir '%s'\n" "$tmpdir"
         # put an empty flag of the same width to prevent the columns from jiggling
-        # TODO: support double-width characters
+        # TODO: support double-width characters (?)
         location_len=$(printf %s "$kak_opt_gdb_location_symbol" | wc -m)
         break_len=$(printf %s "$kak_opt_gdb_breakpoint_active_symbol" | wc -m)
         printf "set global gdb_location_flag 0 '0|%${location_len}s'\n"
