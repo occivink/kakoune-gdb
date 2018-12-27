@@ -60,31 +60,18 @@ def -params .. -file-completion gdb-session-new %{
         while [ ! -e "${kak_opt_gdb_dir}/pty" ]; do
             sleep 0.1
         done
-        if [ -n "$TMUX" ]; then
-            tmux split-window -h " \
-                $kak_opt_gdb_program $@ --init-eval-command=\"new-ui mi3 ${kak_opt_gdb_dir}/pty\""
-        elif [ -n "$WINDOWID" ]; then
-            setsid $kak_opt_termcmd " \
-                $kak_opt_gdb_program $@ --init-eval-command=\"new-ui mi3 ${kak_opt_gdb_dir}/pty\"" 2>/dev/null >/dev/null &
-        fi
     }
+    terminal %opt{gdb_program} %arg{@} --init-eval-command "new-ui mi3 %opt{gdb_dir}/pty"
 }
 
 def rr-session-new %{
     gdb-session-connect-internal
     nop %sh{
-        # can't connect until socat has created the pty thing
         while [ ! -e "${kak_opt_gdb_dir}/pty" ]; do
             sleep 0.1
         done
-        if [ -n "$TMUX" ]; then
-            tmux split-window -h " \
-                rr replay -o --init-eval-command=\"new-ui mi3 ${kak_opt_gdb_dir}/pty\""
-        elif [ -n "$WINDOWID" ]; then
-            setsid $kak_opt_termcmd " \
-                rr replay -o --init-eval-command=\"new-ui mi3 ${kak_opt_gdb_dir}/pty\"" 2>/dev/null >/dev/null &
-        fi
     }
+    terminal rr replay -o --init-eval-command "new-ui mi3 %opt{gdb_dir}/pty"
 }
 
 def gdb-session-connect %{
