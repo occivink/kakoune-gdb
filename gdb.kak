@@ -555,7 +555,7 @@ def gdb-backtrace %{
 }
 
 def -hidden gdb-backtrace-jump %{
-    eval %{
+    eval -save-regs '/' %{
         try %{
             exec -save-regs '' 'xs^([^:]+):(\d+)<ret>'
             set buffer backtrace_current_line %val{cursor_line}
