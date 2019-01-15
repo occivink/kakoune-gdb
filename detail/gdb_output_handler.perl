@@ -314,7 +314,8 @@ while (my $input = <STDIN>) {
                 ($err, $file) = parse_string($err, $frame{"fullname"});
             }
             if ($line ne "???" and $file ne "???") {
-                ($err, $content) = get_line_file($line, $file);
+                my ($err_get_line, $found_content) = get_line_file($line, $file);
+                if (not $err_get_line) { $content = $found_content; }
             }
             print $fifo "$file:$line:$content\n";
         }
