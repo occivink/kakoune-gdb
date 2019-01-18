@@ -61,7 +61,7 @@ def -params .. -file-completion gdb-session-new %{
             sleep 0.1
         done
     }
-    terminal %opt{gdb_program} %arg{@} --init-eval-command "new-ui mi3 %opt{gdb_dir}/pty"
+    terminal %opt{gdb_program} %arg{@} --init-eval-command "set mi-async on" --init-eval-command "new-ui mi3 %opt{gdb_dir}/pty"
 }
 
 def rr-session-new %{
@@ -71,7 +71,7 @@ def rr-session-new %{
             sleep 0.1
         done
     }
-    terminal rr replay -o --init-eval-command "new-ui mi3 %opt{gdb_dir}/pty"
+    terminal rr replay -o --init-eval-command "set mi-async on" --init-eval-command "new-ui mi3 %opt{gdb_dir}/pty"
 }
 
 def gdb-session-connect %{
@@ -328,7 +328,6 @@ while (my $input = <STDIN>) {
     if (!$connected) {
         $connected = 1;
         open(my $fh, '\''>'\'', "${tmpdir}/input_pipe") or die;
-        print $fh "-gdb-set mi-async on\n";
         print $fh "-break-list\n";
         print $fh "-stack-info-frame\n";
         close($fh);

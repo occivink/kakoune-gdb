@@ -261,7 +261,6 @@ while (my $input = <STDIN>) {
         #REMOVE
         next;
         open(my $fh, '>', "${tmpdir}/input_pipe") or die;
-        print $fh "-gdb-set mi-async on\n";
         print $fh "-break-list\n";
         print $fh "-stack-info-frame\n";
         close($fh);

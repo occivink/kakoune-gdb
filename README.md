@@ -30,7 +30,8 @@ If you use [rr](http://rr-project.org/), you can call `rr-session-new`. A new gd
 
 #### Connecting to an existing session
 
-If you already have a running session of gdb but want to make kakoune aware of it, call `gdb-session-connect`. The infobox will show you a command that you should call in gdb directly. Once that is done, kakoune will be connected to gdb and all pre-existing gdb state will be shown.
+If you already have a running session of gdb but want to make kakoune aware of it, call `gdb-session-connect`. The infobox will show you a command that you should call in gdb directly. Once that is done, kakoune will be connected to gdb and all pre-existing gdb state will be shown.  
+**Warning**: for this to work properly, the `mi-async` gdb variable must be set to `on` BEFORE the debugged program has been started.
 
 ### Controlling gdb
 
