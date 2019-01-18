@@ -182,6 +182,15 @@ def gdb-continue          %{ gdb-cmd "-exec-continue" }
 def gdb-set-breakpoint    %{ gdb-breakpoint-impl false true }
 def gdb-clear-breakpoint  %{ gdb-breakpoint-impl true false }
 def gdb-toggle-breakpoint %{ gdb-breakpoint-impl true true }
+def gdb-continue-or-run %{
+   %sh{
+      if [ "$kak_opt_gdb_program_running" = true ]; then
+         printf "gdb-continue\n"
+      else
+         printf "gdb-run\n"
+      fi
+   }
+}
 
 # gdb doesn't tell us in its output what was the expression we asked for, so keep it internally for printing later
 decl -hidden str gdb_expression_demanded
