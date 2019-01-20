@@ -1,6 +1,6 @@
 # kakoune-gdb
 
-[kakoune](http://kakoune.org) plugin to provide integration with gdb.
+[kakoune](http://kakoune.org) plugin for gdb integration.
 
 [![demo](https://asciinema.org/a/164340.png)](https://asciinema.org/a/164340)
 
