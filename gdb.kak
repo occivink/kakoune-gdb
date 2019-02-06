@@ -462,13 +462,29 @@ def gdb-jump-to-location %{
     }}
 }
 
-def -params 1 gdb-cmd %{
+def gdb-cmd -params 1.. %{
     eval %sh{
         if [ "$kak_opt_gdb_started" = false ] || [ ! -p "$kak_opt_gdb_dir"/input_pipe ]; then
             printf "fail 'This command must be executed in a gdb session'"
             exit
         fi
-        printf %s\\n "$1"  > "$kak_opt_gdb_dir"/input_pipe
+        {
+            # TODO do this in awk or something
+            # safe to assume that the gdb command does not need escaping
+            printf %s "$1"
+            shift
+            for i; do
+                printf ' '
+                # special case to preserve empty variables as sed won't touch these
+                if [ "$i" = '' ]; then
+                    printf "''"
+                else
+                    # \ -> \\ then " -> \" and surround with ".."
+                    printf %s "$i" | sed -e 's|\\|\\\\|g; s|"|\\"|g; s|^|"|; s|$|"|'
+                fi
+            done
+            printf \\n
+        } > "$kak_opt_gdb_dir"/input_pipe
     }
 }
 
@@ -504,7 +520,7 @@ def gdb-print -params ..1 %{
     } catch %{
         set global gdb_expression_demanded %val{selection}
     }
-    gdb-cmd "-data-evaluate-expression '%opt{gdb_expression_demanded}'"
+    gdb-cmd -data-evaluate-expression "%opt{gdb_expression_demanded}"
 }
 
 def gdb-enable-autojump %{
