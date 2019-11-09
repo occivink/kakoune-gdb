@@ -101,18 +101,18 @@ set global modelinefmt '%val{bufname} %val{cursor_line}:%val{cursor_char_column}
 To setup "standard" debugger shortcuts, you can use the following snippet:
 ```
 hook global GlobalSetOption gdb_started=true %{
-    map global normal <f10>   ': gdb-next<ret>'
-    map global normal <f11>   ': gdb-step<ret>'
-    map global normal <s-f11> ': gdb-finish<ret>'
-    map global normal <f9>    ': gdb-toggle-breakpoint<ret>'
-    map global normal <f5>    ': gdb-continue<ret>'
+    map global normal <F10>   ': gdb-next<ret>'
+    map global normal <F11>   ': gdb-step<ret>'
+    map global normal <s-F11> ': gdb-finish<ret>'
+    map global normal <F9>    ': gdb-toggle-breakpoint<ret>'
+    map global normal <F5>    ': gdb-continue<ret>'
 }
 hook global GlobalSetOption gdb_started=false %{
-    unmap global normal <f10>   ': gdb-next<ret>'
-    unmap global normal <f11>   ': gdb-step<ret>'
-    unmap global normal <s-f11> ': gdb-finish<ret>'
-    unmap global normal <f9>    ': gdb-toggle-breakpoint<ret>'
-    unmap global normal <f5>    ': gdb-continue<ret>'
+    unmap global normal <F10>   ': gdb-next<ret>'
+    unmap global normal <F11>   ': gdb-step<ret>'
+    unmap global normal <s-F11> ': gdb-finish<ret>'
+    unmap global normal <F9>    ': gdb-toggle-breakpoint<ret>'
+    unmap global normal <F5>    ': gdb-continue<ret>'
 }
 ```
 
