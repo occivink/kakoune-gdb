@@ -1,8 +1,15 @@
 use strict;
 use warnings;
 
-my $session = $ENV{"kak_session"};
-my $tmpdir = $ENV{"tmpdir"};
+my $kak_session = $ENV{"kak_session"};
+my $debug = $ENV{"kak_opt_gdb_debug"};
+if (defined($debug)) {
+    $debug = ($debug eq "true");
+} else {
+    $debug = 0;
+}
+my $tmpdir = $ENV{"tmpdir"} || "/tmp";
+print($tmpdir);
 
 sub escape {
     my $command = shift;
@@ -16,18 +23,19 @@ sub send_to_kak {
     if ($err) { return $err; }
     my $command = join(' ', @_);
 
-    #REMOVE
-    print("${command}\n"); return 0;
-
-    # what a silly pattern
-    my $pid = open(CHILD_STDIN, "|-");
-    defined($pid) || die "can't fork: $!";
-    $SIG{PIPE} = sub { die "child pipe broke" };
-    if ($pid > 0) { # parent
-        print CHILD_STDIN $command;
-        close(CHILD_STDIN) || return 1;
-    } else { # child
-        exec("kak", "-p", $session) || die "can't exec program: $!";
+    if ($kak_session) {
+        # what a silly pattern
+        my $pid = open(CHILD_STDIN, "|-");
+        defined($pid) || die "can't fork: $!";
+        $SIG{PIPE} = sub { die "child pipe broke" };
+        if ($pid > 0) { # parent
+            print CHILD_STDIN $command;
+            close(CHILD_STDIN) || return 1;
+        } else { # child
+            exec("kak", "-p", $kak_session) || die "can't exec program: $!";
+        }
+    } else {
+        print("${command}\n");
     }
     return 0;
 }
@@ -250,6 +258,13 @@ sub get_line_file {
     return 1;
 }
 
+sub debug_maybe {
+    if (not $debug) { return; }
+    my $input = shift;
+    my $err = 0;
+    send_to_kak($err, "echo", "-debug", "[gdb][perl]", escape($input));
+}
+
 my $connected = 0;
 
 while (my $input = <STDIN>) {
@@ -258,16 +273,18 @@ while (my $input = <STDIN>) {
     my $err = 0;
     if (!$connected) {
         $connected = 1;
-        #REMOVE
-        next;
-        open(my $fh, '>', "${tmpdir}/input_pipe") or die;
-        print $fh "-break-list\n";
-        print $fh "-stack-info-frame\n";
-        close($fh);
+        if ($kak_session) {
+            open(my $fh, '>', "${tmpdir}/input_pipe") or die;
+            print $fh "-break-list\n";
+            print $fh "-stack-info-frame\n";
+            close($fh);
+        }
     }
     if ($input =~ /^\*running/) {
+        debug_maybe($input);
         $err = send_to_kak($err, 'gdb-handle-running');
     } elsif ($input =~ /^\*stopped,(.*)$/) {
+        debug_maybe($input);
         my (%map, $reason, %frame, $line, $file, $skip);
         ($err, %map) = parse_map($err, '{' . $1 . '}');
         $skip = 0;
@@ -288,14 +305,17 @@ while (my $input = <STDIN>) {
             }
         }
     } elsif ($input =~ /^=thread-group-exited/) {
+        debug_maybe($input);
         $err = send_to_kak($err, 'gdb-handle-exited');
     } elsif ($input =~ /\^done,frame=(.*)$/) {
+        debug_maybe($input);
         my (%map, $line, $file);
         ($err, %map) = parse_map($err, $1);
         ($err, $line) = parse_string($err, $map{"line"});
         ($err, $file) = parse_string($err, $map{"fullname"});
         $err = send_to_kak($err, 'gdb-clear-location', ';', 'gdb-handle-stopped', $line, escape($file));
     } elsif ($input =~ /\^done,stack=(.*)$/) {
+        debug_maybe($input);
         my @array;
         ($err, @array) = parse_array($err, $1);
         open(my $fifo, ">>", "${tmpdir}/backtrace") or next;
@@ -320,6 +340,7 @@ while (my $input = <STDIN>) {
         }
         close($fifo);
     } elsif ($input =~ /^=breakpoint-(created|modified),bkpt=(.*)$/) {
+        debug_maybe($input);
         my ($operation, @command);
         $operation = $1;
         # implicit array, add delimiters manually
@@ -329,11 +350,13 @@ while (my $input = <STDIN>) {
             $err = send_to_kak($err, @command);
         }
     } elsif ($input =~ /^=breakpoint-deleted,(.*)$/) {
+        debug_maybe($input);
         my (%map, $id);
         ($err, %map) = parse_map($err, '{' . $1 . '}');
         ($err, $id)  = parse_string($err, $map{"id"});
         $err = send_to_kak($err, 'gdb-handle-breakpoint-deleted', $id);
     } elsif ($input =~ /\^done,BreakpointTable=(.*)$/) {
+        debug_maybe($input);
         my (%map, @body, @body_fixed, @command, @subcommand);
         ($err, %map) = parse_map($err, $1);
         ($err, @body) = parse_array($err, $map{"body"});
@@ -348,10 +371,12 @@ while (my $input = <STDIN>) {
         }
         $err = send_to_kak($err, @command);
     } elsif ($input =~ /^\^error,msg=(.*)$/) {
+        debug_maybe($input);
         my $msg;
         ($err, $msg) = parse_string($err, $1);
-        $err = send_to_kak($err, "echo", "-debug", "[gdb]", escape($msg));
+        $err = send_to_kak($err, "echo", "-debug", "[gdb][error]", escape($msg));
     } elsif ($input =~ /^\^done,value=(.*)$/){
+        debug_maybe($input);
         my $val;
         ($err, $val) = parse_string($err, $1);
         $err = send_to_kak($err, "gdb-handle-print", escape($val));

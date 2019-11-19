@@ -2,6 +2,8 @@
 # they must be compatible with gdb arguments
 decl str gdb_program "gdb"
 
+decl bool gdb_debug false
+
 # script summary:
 # a long running shell process starts a gdb session (or connects to an existing one) and handles input/output
 # kakoune -> gdb communication is done by writing the gdb commands to a fifo
@@ -21,9 +23,9 @@ decl bool gdb_started false
 decl bool gdb_program_running false
 # the debugged program is currently running, but stopped
 decl bool gdb_program_stopped false
-# if not empty, contains the name of client in which the autojump is performed
+# if not empty, contains the name of the client in which the autojump is performed
 decl str gdb_autojump_client
-# if not empty, contains the name of client in which the value is printed
+# if not empty, contains the name of the client in which the value is printed
 # set by default to the client which started the session
 decl str gdb_print_client
 
@@ -52,6 +54,15 @@ decl -hidden line-specs gdb_location_flag
 addhl shared/gdb group -passes move
 addhl shared/gdb/ flag-lines GdbLocation gdb_location_flag
 addhl shared/gdb/ flag-lines GdbBreakpoint gdb_breakpoints_flags
+
+eval %{
+    try %{
+        %sh{ [ gdb_debug = "false" ] && printf 'fail' }
+        def gdb-debug -hidden -params .. ''
+    } catch %{
+        def gdb-debug -hidden -params .. %{ echo -debug '[gdb][kak]' %arg{@} }
+    }
+}
 
 def -params .. -file-completion gdb-session-new %{
     gdb-session-connect-internal
@@ -139,7 +150,7 @@ def -hidden gdb-session-connect-internal %§
 
 def gdb-jump-to-location %{
     try %{ eval %sh{
-        eval set -- "$kak_opt_gdb_location_info"
+        eval set -- "$kak_quoted_opt_gdb_location_info"
         [ $# -eq 0 ] && exit
         line="$1"
         buffer="$2"
@@ -148,6 +159,7 @@ def gdb-jump-to-location %{
 }
 
 def gdb-cmd -params 1.. %{
+    gdb-debug gdb-cmd %arg{@}
     eval %sh{
         if [ "$kak_opt_gdb_started" = false ] || [ ! -p "$kak_opt_gdb_dir"/input_pipe ]; then
             printf "fail 'This command must be executed in a gdb session'"
@@ -312,7 +324,7 @@ def gdb-breakpoint-impl -hidden -params 2 %{
                 for selection in $kak_selections_desc; do
                     cursor_line=${selection%%.*}
                     match_found="false"
-                    eval set -- "$kak_opt_gdb_breakpoints_info"
+                    eval set -- "$kak_quoted_opt_gdb_breakpoints_info"
                     while [ $# -ne 0 ]; do
                         if [ "$4" = "$kak_buffile" ] && [ "$3" = "$cursor_line" ]; then
                             [ "$delete" = true ] && printf "delete %s\n" "$1"
@@ -341,6 +353,7 @@ def gdb-breakpoint-impl -hidden -params 2 %{
 
 
 def -hidden -params 2 gdb-handle-stopped %{
+    gdb-debug gdb-handle-stopped %arg{@}
     try %{
         gdb-process-pending-commands
         gdb-continue
@@ -354,6 +367,7 @@ def -hidden -params 2 gdb-handle-stopped %{
 }
 
 def -hidden gdb-handle-stopped-unknown %{
+    gdb-debug gdb-handle-stopped-unknown
     try %{
         gdb-process-pending-commands
         gdb-continue
@@ -364,6 +378,7 @@ def -hidden gdb-handle-stopped-unknown %{
 }
 
 def -hidden gdb-handle-exited %{
+    gdb-debug gdb-handle-exited
     try %{ gdb-process-pending-commands }
     set global gdb_program_running false
     set global gdb_program_stopped false
@@ -372,6 +387,7 @@ def -hidden gdb-handle-exited %{
 }
 
 def -hidden gdb-process-pending-commands %{
+    gdb-debug gdb-process-pending-commands
     eval %sh{
         if [ ! -n "$kak_opt_gdb_pending_commands" ]; then
             printf fail
@@ -383,6 +399,7 @@ def -hidden gdb-process-pending-commands %{
 }
 
 def -hidden gdb-handle-running %{
+    gdb-debug gdb-handle-running
     set global gdb_program_running true
     set global gdb_program_stopped false
     gdb-set-indicator-from-current-state
@@ -390,8 +407,9 @@ def -hidden gdb-handle-running %{
 }
 
 def -hidden gdb-clear-location %{
+    gdb-debug gdb-clear-location
     try %{ eval %sh{
-        eval set -- "$kak_opt_gdb_location_info"
+        eval set -- "$kak_quoted_opt_gdb_location_info"
         [ $# -eq 0 ] && exit
         buffer="$2"
         printf "unset 'buffer=%s' gdb_location_flag" "$buffer"
@@ -401,12 +419,13 @@ def -hidden gdb-clear-location %{
 
 # refresh the location flag of the buffer passed as argument
 def -hidden -params 1 gdb-refresh-location-flag %{
+    gdb-debug gdb-refresh-location-flag %arg{@}
     # buffer may not exist, only try
     try %{
         eval -buffer %arg{1} %{
             eval %sh{
                 buffer_to_refresh="$1"
-                eval set -- "$kak_opt_gdb_location_info"
+                eval set -- "$kak_quoted_opt_gdb_location_info"
                 [ $# -eq 0 ] && exit
                 buffer_stopped="$2"
                 [ "$buffer_to_refresh" != "$buffer_stopped" ] && exit
@@ -418,15 +437,17 @@ def -hidden -params 1 gdb-refresh-location-flag %{
 }
 
 def -hidden -params 4 gdb-handle-breakpoint-created %{
+    gdb-debug gdb-handle-breakpoint-created %arg{@}
     set -add global gdb_breakpoints_info %arg{1} %arg{2} %arg{3} %arg{4}
     gdb-refresh-breakpoints-flags %arg{4}
 }
 
 def -hidden -params 1 gdb-handle-breakpoint-deleted %{
+    gdb-debug gdb-handle-breakpoint-deleted %arg{@}
     eval %sh{
         id_to_delete="$1"
         printf "set global gdb_breakpoints_info\n"
-        eval set -- "$kak_opt_gdb_breakpoints_info"
+        eval set -- "$kak_quoted_opt_gdb_breakpoints_info"
         while [ $# -ne 0 ]; do
             if [ "$1" = "$id_to_delete" ]; then
                 buffer_deleted_from="$4"
@@ -440,13 +461,14 @@ def -hidden -params 1 gdb-handle-breakpoint-deleted %{
 }
 
 def -hidden -params 4 gdb-handle-breakpoint-modified %{
+    gdb-debug gdb-handle-breakpoint-modified %arg{@}
     eval %sh{
         id_modified="$1"
         active="$2"
         line="$3"
         file="$4"
         printf "set global gdb_breakpoints_info\n"
-        eval set -- "$kak_opt_gdb_breakpoints_info"
+        eval set -- "$kak_quoted_opt_gdb_breakpoints_info"
         while [ $# -ne 0 ]; do
             if [ "$1" = "$id_modified" ]; then
                 printf "set -add global gdb_breakpoints_info %s %s %s '%s'\n" "$id_modified" "$active" "$line" "$file"
@@ -461,13 +483,14 @@ def -hidden -params 4 gdb-handle-breakpoint-modified %{
 
 # refresh the breakpoint flags of the file passed as argument
 def -hidden -params 1 gdb-refresh-breakpoints-flags %{
+    gdb-debug gdb-refresh-breakpoints-flags %arg{@}
     # buffer may not exist, so only try
     try %{
         eval -buffer %arg{1} %{
             unset buffer gdb_breakpoints_flags
             eval %sh{
                 to_refresh="$1"
-                eval set -- "$kak_opt_gdb_breakpoints_info"
+                eval set -- "$kak_quoted_opt_gdb_breakpoints_info"
                 while [ $# -ne 0 ]; do
                     buffer="$4"
                     if [ "$buffer" = "$to_refresh" ]; then
@@ -488,6 +511,7 @@ def -hidden -params 1 gdb-refresh-breakpoints-flags %{
 }
 
 def -hidden gdb-handle-print -params 1 %{
+    gdb-debug gdb-handle-print %arg{@}
     try %{
         eval -buffer *gdb-print* %{
             reg '"' "%opt{gdb_expression_demanded} == %arg{1}"
@@ -500,11 +524,13 @@ def -hidden gdb-handle-print -params 1 %{
 
 # clear all breakpoint information internal to kakoune
 def -hidden gdb-clear-breakpoints %{
+    gdb-debug gdb-clear-breakpoints
     eval -buffer * %{ unset buffer gdb_breakpoints_flags }
     set global gdb_breakpoints_info
 }
 
 def -hidden gdb-handle-perl-exited -params 1 %{
+    gdb-debug gdb-handle-perl-exited %arg{@}
     try %{
         # only do this if the session that exited is the current one
         # this might not be the case if a session was started while another was active
