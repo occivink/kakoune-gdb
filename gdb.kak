@@ -510,30 +510,34 @@ def gdb-cmd -params 1.. %{
             exit
         fi
         {
-            # TODO do this in awk or something
-            # safe to assume that the gdb command does not need escaping
-            printf %s "$1"
-            shift
-            for i; do
-                printf ' '
-                # special case to preserve empty variables as sed won't touch these
-                if [ "$i" = '' ]; then
-                    printf "''"
-                else
-                    # \ -> \\ then " -> \" and surround with ".."
-                    printf %s "$i" | sed -e 's|\\|\\\\|g; s|"|\\"|g; s|^|"|; s|$|"|'
-                fi
-            done
-            printf \\n
+            cat <<'EOF' | perl - "$@"
+use strict;
+use warnings;
+foreach my $arg (@ARGV) {
+    if ($arg =~ /^[A-Za-z0-9-_]+$/) {
+        # print as-is
+        print($arg . " ");
+    } elsif ($arg eq "\n") {
+        print("\n");
+    } elsif ($arg eq "") {
+        print("''");
+    } else {
+        # escape \ and " with a \
+        $arg =~ s/([\\"])/\\$1/g;
+        print('"' . $arg . '" ');
+    }
+}
+print("\n");
+EOF
         } > "$kak_opt_gdb_dir"/input_pipe
     }
 }
 
 def gdb-session-stop      %{ gdb-cmd "-gdb-exit" }
-def gdb-run -params ..    %{ gdb-cmd "-exec-arguments" %arg{@} "
--exec-run" }
-def gdb-start -params ..  %{ gdb-cmd "-exec-arguments" %arg{@} "
--exec-run --start" }
+def gdb-run -params ..    %{ gdb-cmd '-exec-arguments' %arg{@} '
+' '-exec-run' }
+def gdb-start -params ..  %{ gdb-cmd '-exec-arguments' %arg{@} '
+' '-exec-run' '--start' }
 def gdb-step              %{ gdb-cmd "-exec-step" }
 def gdb-next              %{ gdb-cmd "-exec-next" }
 def gdb-finish            %{ gdb-cmd "-exec-finish" }
