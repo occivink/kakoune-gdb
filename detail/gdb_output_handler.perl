@@ -314,6 +314,14 @@ while (my $input = <STDIN>) {
         ($err, $line) = parse_string($err, $map{"line"});
         ($err, $file) = parse_string($err, $map{"fullname"});
         $err = send_to_kak($err, 'gdb-clear-location', ';', 'gdb-handle-stopped', $line, escape($file));
+    } elsif ($input =~ /^=thread-selected,(.*)$/) {
+        debug_maybe($input);
+        my (%map, %frame, $file, $line);
+        ($err, %map) = parse_map($err, '{' . $1 . '}');
+        ($err, %frame) = parse_map($err, $map{"frame"});
+        ($err, $line) = parse_string($err, $frame{"line"});
+        ($err, $file) = parse_string($err, $frame{"fullname"});
+        $err = send_to_kak($err, 'gdb-clear-location', ';', 'gdb-handle-stopped', $line, escape($file));
     } elsif ($input =~ /\^done,stack=(.*)$/) {
         debug_maybe($input);
         my @array;

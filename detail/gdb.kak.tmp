@@ -272,8 +272,9 @@ def -hidden gdb-backtrace-jump %{
         try %{
             exec -save-regs '' 'xs^([^:]+):(\d+)<ret>'
             set buffer backtrace_current_line %val{cursor_line}
-            eval -try-client %opt{jumpclient} "edit -existing %reg{1} %reg{2}"
-            try %{ focus %opt{jumpclient} }
+            # if autojump is enabled, this should trigger a jump
+            # neat
+            gdb-cmd 'frame' %sh{ printf '%s' $(( kak_cursor_line - 1 )) }
         }
     }
 }
