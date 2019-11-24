@@ -9,7 +9,6 @@ if (defined($debug)) {
     $debug = 0;
 }
 my $tmpdir = $ENV{"tmpdir"} || "/tmp";
-print($tmpdir);
 
 sub escape {
     my $command = shift;
@@ -35,6 +34,7 @@ sub send_to_kak {
             exec("kak", "-p", $kak_session) || die "can't exec program: $!";
         }
     } else {
+        # for script debugging purposes
         print("${command}\n");
     }
     return 0;
