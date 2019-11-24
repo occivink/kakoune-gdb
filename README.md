@@ -6,7 +6,7 @@
 
 ## Setup
 
-Add `gdb.kak` to your autoload dir: `~/.config/kak/autoload/`, or source it manually.
+Add `gdb.kak` and `gdb-output-hanlder.perl` to your autoload dir: `~/.config/kak/autoload/`, or source it manually. Both files must be in the same directory for the script to work.
 
 You need at least Kakoune v2019.01.20. In addition, this script has hard dependencies on `gdb` (>= 7.12), `socat`, `perl` as well as the usual POSIX environment. There is also on optional dependency on `rr`.
 
