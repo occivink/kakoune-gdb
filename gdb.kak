@@ -116,7 +116,7 @@ def -hidden gdb-session-connect-internal %§
             printf "fail '''socat'' and ''perl'' must be installed to use this plugin'"
             exit
         fi
-        export tmpdir=$(mktemp --tmpdir -d gdb_kak_XXX)
+        export tmpdir=$(mktemp -t -d gdb_kak_XXX)
         mkfifo "${tmpdir}/input_pipe"
         {
             # too bad gdb only exposes its new-ui via a pty, instead of simply a socket
