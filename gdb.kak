@@ -74,7 +74,7 @@ def -params .. -file-completion gdb-session-new %{
             sleep 0.1
         done
     }
-    terminal %opt{gdb_program} %arg{@} --init-eval-command "set mi-async on" --init-eval-command "new-ui mi3 %opt{gdb_dir}/pty"
+    terminal %opt{gdb_program} --init-eval-command "set mi-async on" --init-eval-command "new-ui mi3 %opt{gdb_dir}/pty" %arg{@}
 }
 
 def rr-session-new %{
