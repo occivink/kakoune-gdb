@@ -131,10 +131,8 @@ def -hidden gdb-session-connect-internal %§
         printf "set global gdb_dir '%s'\n" "$tmpdir"
         # put an empty flag of the same width to prevent the columns from jiggling
         # TODO: support double-width characters (?)
-        location_len=$(printf %s "$kak_opt_gdb_location_symbol" | wc -m)
-        break_len=$(printf %s "$kak_opt_gdb_breakpoint_active_symbol" | wc -m)
-        printf "set global gdb_location_flag 0 '0|%${location_len}s'\n"
-        printf "set global gdb_breakpoints_flags 0 '0|%${break_len}s'\n"
+        printf "set global gdb_location_flag 0 '0|%s'\n" "$kak_opt_gdb_location_symbol"
+        printf "set global gdb_breakpoints_flags 0 '0|%s'\n" "$kak_opt_gdb_breakpoint_active_symbol"
     §§
     set global gdb_started true
     set global gdb_print_client %val{client}
@@ -429,6 +427,7 @@ def -hidden -params 1 gdb-refresh-location-flag %{
     # buffer may not exist, only try
     try %{
         eval -buffer %arg{1} %{
+            set buffer gdb_location_flag %val{timestamp} "0|%opt{gdb_location_flag}"
             eval %sh{
                 buffer_to_refresh="$1"
                 eval set -- "$kak_quoted_opt_gdb_location_info"
@@ -493,7 +492,7 @@ def -hidden -params 1 gdb-refresh-breakpoints-flags %{
     # buffer may not exist, so only try
     try %{
         eval -buffer %arg{1} %{
-            unset buffer gdb_breakpoints_flags
+            set buffer gdb_breakpoints_flags %val{timestamp} "0|%opt{gdb_breakpoint_active_symbol}"
             eval %sh{
                 to_refresh="$1"
                 eval set -- "$kak_quoted_opt_gdb_breakpoints_info"
