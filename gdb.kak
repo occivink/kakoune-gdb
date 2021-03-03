@@ -427,7 +427,7 @@ def -hidden -params 1 gdb-refresh-location-flag %{
     # buffer may not exist, only try
     try %{
         eval -buffer %arg{1} %{
-            set buffer gdb_location_flag %val{timestamp} "0|%opt{gdb_location_flag}"
+            set buffer gdb_location_flag %val{timestamp} "0|%opt{gdb_location_symbol}"
             eval %sh{
                 buffer_to_refresh="$1"
                 eval set -- "$kak_quoted_opt_gdb_location_info"
