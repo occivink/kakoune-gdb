@@ -73,7 +73,7 @@ define-command gdb-continue          %{ gdb-cmd -exec-continue }
 ```
 
 You can also use the existing options to further refine your commands. Some of these are read-only (`[R]`), some can also be written to (`[RW]`).
-* `gdb_started`[bool][R]        : true if a debugging session has been started
+* `gdb_session_started`[bool][R]        : true if a debugging session has been started
 * `gdb_program_running`[bool][R]: true if the debugged program is currently running (stopped or not)
 * `gdb_program_stopped`[bool][R]: true if the debugged program is currently running, and stopped
 * `gdb_autojump_client`[str][RW]: if autojump is enabled, the name of the client in which the jump is performed
@@ -102,14 +102,14 @@ set global modelinefmt '%val{bufname} %val{cursor_line}:%val{cursor_char_column}
 
 To setup "standard" debugger shortcuts, you can use the following snippet:
 ```
-hook global GlobalSetOption gdb_started=true %{
+hook global GlobalSetOption gdb_session_started=true %{
     map global normal <F10>   ': gdb-next<ret>'
     map global normal <F11>   ': gdb-step<ret>'
     map global normal <s-F11> ': gdb-finish<ret>'
     map global normal <F9>    ': gdb-toggle-breakpoint<ret>'
     map global normal <F5>    ': gdb-continue<ret>'
 }
-hook global GlobalSetOption gdb_started=false %{
+hook global GlobalSetOption gdb_session_started=false %{
     unmap global normal <F10>   ': gdb-next<ret>'
     unmap global normal <F11>   ': gdb-step<ret>'
     unmap global normal <s-F11> ': gdb-finish<ret>'
@@ -122,6 +122,11 @@ hook global GlobalSetOption gdb_started=false %{
 
 * set temporary/conditional breakpoints
 * handle up/down, and moving the current frame from the backtrace buffer
+
+
+### Notable changes
+
+* The `gdb_started` option was renamed to `gdb_session_started`
 
 ## License
 
