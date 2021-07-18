@@ -166,40 +166,6 @@ sub parse_map {
     }
 }
 
-# the breakpoint table is the worst offender of not respecing the grammar
-# this function changes the "body" part of it from this :
-#[bkpt={number="3",type="breakpoint",disp="keep",enabled="y",addr="<MULTIPLE>",times="0",original-location="/blabla/test/test.cpp:10"},{number="3.1",enabled="y",addr="0x00005555555548d2",func="main()",file="test.cpp",fullname="/blabla/test/test.cpp",line="10",thread-groups=["i1"]},{number="3.2",enabled="y",addr="0x00005555555548e7",func="__static_initialization_and_destruction_0(int, int)",file="test.cpp",fullname="/blabla/test/test.cpp",line="10",thread-groups=["i1"]},bkpt={number="5",type="breakpoint",disp="keep",enabled="y",addr="<PENDING>",pending="12",times="0",original-location="12"}]
-# to this:
-#[[{number="3",type="breakpoint",disp="keep",enabled="y",addr="<MULTIPLE>",times="0",original-location="/blabla/test/test.cpp:10"},{number="3.1",enabled="y",addr="0x00005555555548d2",func="main()",file="test.cpp",fullname="/blabla/test/test.cpp",line="10",thread-groups=["i1"]},{number="3.2",enabled="y",addr="0x00005555555548e7",func="__static_initialization_and_destruction_0(int, int)",file="test.cpp",fullname="/blabla/test/test.cpp",line="10",thread-groups=["i1"]}],[{number="5",type="breakpoint",disp="keep",enabled="y",addr="<PENDING>",pending="12",times="0",original-location="12"}]]
-# meaning that it groups "multiple" breakpoints by array
-# and gets rid of the stupid "bkpt" key which doesn't belong in an array anyway
-# the grammar does allow arrays to have "keys" but what's even the point of that if you're going to reuse the same key for multiple things?
-sub fixup_breakpoint_table {
-    my $err = shift;
-    if ($err) { return $err; }
-    my @table = @_;
-    my @fixed;
-    my $index = 0;
-    while ($index < scalar(@table)) {
-        my $val = $table[$index];
-
-        # should never occur
-        if ($val !~ m/^bkpt=(.*)$/) { return 1; }
-
-        my $res = '[' . $1;
-        $index += 1;
-        while ($index < scalar(@table)) {
-            my $sub = $table[$index];
-            if ($sub =~ m/^bkpt=/) { last; }
-            $res .= ',' . $sub;
-            $index += 1;
-        }
-        $res .= ']';
-        push(@fixed, $res);
-    }
-    return (0, @fixed);
-}
-
 sub breakpoint_to_command {
     my $err = shift;
     if ($err) { return $err; }
@@ -366,12 +332,15 @@ while (my $input = <STDIN>) {
         $err = send_to_kak($err, 'gdb-handle-breakpoint-deleted', $id);
     } elsif ($input =~ /\^done,BreakpointTable=(.*)$/) {
         debug_maybe($input);
-        my (%map, @body, @body_fixed, @command, @subcommand);
+        my (%map, @body, @command, @subcommand);
         ($err, %map) = parse_map($err, $1);
         ($err, @body) = parse_array($err, $map{"body"});
-        ($err, @body_fixed) = fixup_breakpoint_table($err, @body);
         @command = ('gdb-clear-breakpoints');
-        for my $val (@body_fixed) {
+        for my $val (@body) {
+            # get rid of the bkpt= part in bkpt={...}
+            # what's the point of using keys in an array, if they're always the same?
+            if ($val !~ m/^bkpt=(.*)$/) { $err = 1; }
+            $val = $1;
             ($err, @subcommand) = breakpoint_to_command($err, 'gdb-handle-breakpoint-created', $val);
             if (scalar(@subcommand) > 0) {
                 push(@command, ';');
