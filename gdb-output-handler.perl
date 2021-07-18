@@ -205,24 +205,25 @@ sub breakpoint_to_command {
     if ($err) { return $err; }
 
     my $cmd = shift;
-    my $array = shift;
-    my (@bkpt_array, %main_bkpt, $id, $enabled, $line, $file, $addr);
-    ($err, @bkpt_array) = parse_array($err, $array);
-    ($err, %main_bkpt) = parse_map($err, $bkpt_array[0]);
-    ($err, $id) = parse_string($err, $main_bkpt{"number"});
-    ($err, $enabled) = parse_string($err, $main_bkpt{"enabled"});
+    my $map = shift;
+    my (%bkpt, $id, $enabled, $line, $file, $addr);
+    ($err, %bkpt) = parse_map($err, $map);
+    ($err, $id) = parse_string($err, $bkpt{"number"});
+    ($err, $enabled) = parse_string($err, $bkpt{"enabled"});
 
     my $is_multiple = 0;
-    if (exists($main_bkpt{"addr"})) {
-        ($err, $addr) = parse_string($err, $main_bkpt{"addr"});
+    if (exists($bkpt{"addr"})) {
+        ($err, $addr) = parse_string($err, $bkpt{"addr"});
         if ($addr eq "<PENDING>") {
             return (0, ());
         } elsif ($addr eq "<MULTIPLE>") {
              $is_multiple = 1;
+             my @bkpt_locations;
+             ($err, @bkpt_locations) = parse_array($err, $bkpt{"locations"});
              my $i = 1;
-             while ($i < scalar(@bkpt_array)) {
+             while ($i < scalar(@bkpt_locations)) {
                 my %sub_bkpt;
-                ($err, %sub_bkpt) = parse_map($err, $bkpt_array[$i]);
+                ($err, %sub_bkpt) = parse_map($err, $bkpt_locations[$i]);
                 if (exists($sub_bkpt{"line"}) and exists($sub_bkpt{"fullname"})) {
                     ($err, $line) = parse_string($err, $sub_bkpt{"line"});
                     ($err, $file) = parse_string($err, $sub_bkpt{"fullname"});
@@ -235,8 +236,8 @@ sub breakpoint_to_command {
         }
     }
     if (not $is_multiple) {
-        ($err, $line) = parse_string($err, $main_bkpt{"line"});
-        ($err, $file) = parse_string($err, $main_bkpt{"fullname"});
+        ($err, $line) = parse_string($err, $bkpt{"line"});
+        ($err, $file) = parse_string($err, $bkpt{"fullname"});
         if ($err) { return $err; }
         return (0, ($cmd, $id, $enabled, $line, escape($file)));
     }
@@ -352,7 +353,7 @@ while (my $input = <STDIN>) {
         my ($operation, @command);
         $operation = $1;
         # implicit array, add delimiters manually
-        ($err, @command) = breakpoint_to_command($err, "gdb-handle-breakpoint-$operation", '[' . $2 . ']');
+        ($err, @command) = breakpoint_to_command($err, "gdb-handle-breakpoint-$operation", $2);
 
         if (scalar(@command) > 0) {
             $err = send_to_kak($err, @command);
