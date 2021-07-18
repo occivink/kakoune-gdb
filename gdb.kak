@@ -4,7 +4,7 @@ decl str gdb_program "gdb"
 
 decl -hidden str gdb_output_handler %sh{ printf "%s/%s" "${kak_source%/*}" "gdb-output-handler.perl" }
 
-decl bool gdb_debug false
+decl -hidden bool gdb_debug false
 
 # script summary:
 # a long running shell process starts a gdb session (or connects to an existing one) and handles input/output
@@ -20,7 +20,7 @@ face global GdbBreakpoint red,default
 face global GdbLocation blue,default
 
 # a debugging session has been started
-decl bool gdb_started false
+decl bool gdb_session_started false
 # the debugged program is currently running (stopped or not)
 decl bool gdb_program_running false
 # the debugged program is currently running, but stopped
@@ -66,37 +66,66 @@ eval %{
     }
 }
 
-def -params .. -file-completion gdb-session-new %{
-    gdb-session-connect-internal
+# session management commands
+
+def -params .. -file-completion gdb-session-new -docstring "
+gdb-session-new [<arguments>]: starts a new gdb session
+The arguments are passed to gdb. In particular, the first argument is the program to be debugged.
+" %{
+    gdb-session-start-receiver
     nop %sh{
         # can't connect until socat has created the pty thing
         while [ ! -e "${kak_opt_gdb_dir}/pty" ]; do
             sleep 0.1
         done
     }
-    terminal %opt{gdb_program} --init-eval-command "set mi-async on" --init-eval-command "new-ui mi3 %opt{gdb_dir}/pty" %arg{@}
+    try %{
+        terminal %opt{gdb_program} --init-eval-command "set mi-async on" --init-eval-command "new-ui mi3 %opt{gdb_dir}/pty" %arg{@}
+    } catch %{
+        gdb-session-stop-receiver
+        fail 'The ''terminal'' command must be defined to start a gdb session'
+    }
 }
 
-def rr-session-new %{
-    gdb-session-connect-internal
+def rr-session-new -docstring "
+starts a new gdb session using 'rr replay'
+" %{
+    gdb-session-start-receiver
     nop %sh{
         while [ ! -e "${kak_opt_gdb_dir}/pty" ]; do
             sleep 0.1
         done
     }
-    terminal rr replay -o --init-eval-command "set mi-async on" --init-eval-command "new-ui mi3 %opt{gdb_dir}/pty"
+    try %{
+        terminal rr replay -o --init-eval-command "set mi-async on" --init-eval-command "new-ui mi3 %opt{gdb_dir}/pty"
+    } catch %{
+        gdb-session-stop-receiver
+        fail 'The ''terminal'' command must be defined to start a gdb session'
+    }
 }
 
-def gdb-session-connect %{
-    gdb-session-connect-internal
+def gdb-session-connect -docstring "
+manually connect to an existing gdb session
+" %{
+    gdb-session-start-receiver
+    echo -debug ""
     info "Please instruct gdb to ""new-ui mi3 %opt{gdb_dir}/pty"""
 }
 
-def -hidden gdb-session-connect-internal %§
+def -hidden gdb-session-stop-receiver %{
+    # gdb couldn't be started, connect ourselves briefly to the PTY so that the receiver is stopped
+    # triggering a client-side-cleanup
+    nop %sh{
+        [ "$kak_opt_gdb_session_started" = false ] && exit
+    echo '' | socat -t0.2 - "$kak_opt_gdb_dir/pty" > /dev/null
+    }
+}
+
+def -hidden gdb-session-start-receiver %{
     try %{
         # a previous session was ongoing, stop it and clean the options
         gdb-session-stop
-        set global gdb_started false
+        set global gdb_session_started false
         set global gdb_program_running false
         set global gdb_program_stopped false
         set global gdb_indicator ""
@@ -111,7 +140,7 @@ def -hidden gdb-session-connect-internal %§
         rmhl global/gdb-ref
         rmhooks global gdb-ref
     }
-    eval %sh§§
+    eval %sh{
         if ! command -v socat >/dev/null 2>&1 || ! command -v perl >/dev/null 2>&1; then
             printf "fail '''socat'' and ''perl'' must be installed to use this plugin'"
             exit
@@ -122,7 +151,7 @@ def -hidden gdb-session-connect-internal %§
             # too bad gdb only exposes its new-ui via a pty, instead of simply a socket
             # the 'wait-slave' argument makes socat exit when the other end of the pty (gdb) exits, which is exactly what we want
             # 'setsid socat' allows us to ignore any ctrl+c sent from kakoune
-            tail -n +1 -f "${tmpdir}/input_pipe" | setsid socat "pty,wait-slave,link=${tmpdir}/pty" STDIO,nonblock=1 | perl "$kak_opt_gdb_output_handler"
+            tail -n +1 -f "${tmpdir}/input_pipe" | setsid socat "pty,wait-slave,link=${tmpdir}/pty,pty-interval=0.1" STDIO,nonblock=1 | perl "$kak_opt_gdb_output_handler"
             # when the perl program finishes (crashed or gdb closed the pty), cleanup and tell kakoune to stop the session
             rm -f "${tmpdir}/input_pipe"
             rmdir "$tmpdir"
@@ -130,11 +159,10 @@ def -hidden gdb-session-connect-internal %§
         } > /dev/null 2>&1 < /dev/null &
         printf "set global gdb_dir '%s'\n" "$tmpdir"
         # put an empty flag of the same width to prevent the columns from jiggling
-        # TODO: support double-width characters (?)
         printf "set global gdb_location_flag 0 '0|%s'\n" "$kak_opt_gdb_location_symbol"
         printf "set global gdb_breakpoints_flags 0 '0|%s'\n" "$kak_opt_gdb_breakpoint_active_symbol"
-    §§
-    set global gdb_started true
+    }
+    set global gdb_session_started true
     set global gdb_print_client %val{client}
     gdb-set-indicator-from-current-state
     hook -group gdb global BufOpenFile .* %{
@@ -145,9 +173,13 @@ def -hidden gdb-session-connect-internal %§
         gdb-session-stop
     }
     addhl global/gdb-ref ref -passes move gdb
-§
+}
 
-def gdb-jump-to-location %{
+# 
+
+def gdb-jump-to-location -docstring "
+if execution is stopped, jump to the current location
+" %{
     try %{ eval %sh{
         eval set -- "$kak_quoted_opt_gdb_location_info"
         [ $# -eq 0 ] && exit
@@ -157,10 +189,12 @@ def gdb-jump-to-location %{
     }}
 }
 
-def gdb-cmd -params 1.. %{
+def gdb-cmd -params 1.. -docstring "
+gdb-cmd [<arguments>]: send an arbitrary command to gdb
+" %{
     gdb-debug gdb-cmd %arg{@}
     eval %sh{
-        if [ "$kak_opt_gdb_started" = false ] || [ ! -p "$kak_opt_gdb_dir"/input_pipe ]; then
+        if [ "$kak_opt_gdb_session_started" = false ] || [ ! -p "$kak_opt_gdb_dir"/input_pipe ]; then
             printf "fail 'This command must be executed in a gdb session'"
             exit
         fi
@@ -188,19 +222,51 @@ EOF
     }
 }
 
-def gdb-session-stop      %{ gdb-cmd "-gdb-exit" }
-def gdb-run -params ..    %{ gdb-cmd '-exec-arguments' %arg{@} '
+def gdb-session-stop -docstring "
+send the 'exit' command to gdb, stopping the session
+" %{ gdb-cmd "-gdb-exit" }
+
+def gdb-run -docstring "
+send the 'run' command to gdb, (re)starting the debugged program
+" -params ..    %{ gdb-cmd '-exec-arguments' %arg{@} '
 ' '-exec-run' }
-def gdb-start -params ..  %{ gdb-cmd '-exec-arguments' %arg{@} '
+
+def gdb-start -docstring "
+send the 'start' command to gdb, (re)starting the debugged program and stopping right away
+" -params ..  %{ gdb-cmd '-exec-arguments' %arg{@} '
 ' '-exec-run' '--start' }
-def gdb-step              %{ gdb-cmd "-exec-step" }
-def gdb-next              %{ gdb-cmd "-exec-next" }
-def gdb-finish            %{ gdb-cmd "-exec-finish" }
-def gdb-continue          %{ gdb-cmd "-exec-continue" }
-def gdb-set-breakpoint    %{ gdb-breakpoint-impl false true }
-def gdb-clear-breakpoint  %{ gdb-breakpoint-impl true false }
-def gdb-toggle-breakpoint %{ gdb-breakpoint-impl true true }
-def gdb-continue-or-run %{
+
+def gdb-step -docstring "
+send the 'step' command to gdb, resuming the execution until the next source line, stepping into functions
+" %{ gdb-cmd "-exec-step" }
+
+def gdb-next -docstring "
+send the 'next' command to gdb, resuming the execution until the next source line, stepping over functions
+" %{ gdb-cmd "-exec-next" }
+
+def gdb-finish -docstring "
+send the 'finish' command to gdb, resuming the execution until the end of the current function
+" %{ gdb-cmd "-exec-finish" }
+
+def gdb-continue -docstring "
+send the 'continue' command to gdb, resuming the execution
+" %{ gdb-cmd "-exec-continue" }
+
+def gdb-set-breakpoint -docstring "
+set breakpoint(s) at the current cursor lines
+" %{ gdb-breakpoint-impl false true }
+
+def gdb-clear-breakpoint -docstring "
+clear any breakpoint at the current cursor lines
+" %{ gdb-breakpoint-impl true false }
+
+def gdb-toggle-breakpoint -docstring "
+clear any breakpoint at the current cursor lines
+" %{ gdb-breakpoint-impl true true }
+
+def gdb-continue-or-run -docstring "
+if the program has already been started, send 'continue' (otherwise 'run') to gdb
+" %{
    %sh{
       if [ "$kak_opt_gdb_program_running" = true ]; then
          printf "gdb-continue\n"
@@ -213,7 +279,12 @@ def gdb-continue-or-run %{
 # gdb doesn't tell us in its output what was the expression we asked for, so keep it internally for printing later
 decl -hidden str gdb_expression_demanded
 
-def gdb-print -params ..1 %{
+def gdb-print -params ..1 -docstring "
+gdb-print [<expression>]: print the value of an expression
+Print the value of the expression specified. If no expression is specified,
+the main selection is used instead.
+If a *gdb-print* buffer exists, the result will also be appended there.
+" %{
     try %{
         eval %sh{ [ -z "$1" ] && printf fail }
         set global gdb_expression_demanded %arg{1}
@@ -223,18 +294,30 @@ def gdb-print -params ..1 %{
     gdb-cmd -data-evaluate-expression "%opt{gdb_expression_demanded}"
 }
 
-def gdb-enable-autojump %{
+def gdb-enable-autojump -docstring "
+enable the autojump feature.
+When autojump is enabled, the current client is automatically switched to the
+location at which the execution was stopped.
+" %{
     try %{
-        eval %sh{ [ "$kak_opt_gdb_started" = false ] && printf fail }
+        eval %sh{ [ "$kak_opt_gdb_session_started" = false ] && printf fail }
         set global gdb_autojump_client %val{client}
         gdb-set-indicator-from-current-state
     }
 }
-def gdb-disable-autojump %{
+
+def gdb-disable-autojump -docstring "
+disable the autojump feature.
+See 'gdb-enable-autojump' for a description of the feature.
+" %{
     set global gdb_autojump_client ""
     gdb-set-indicator-from-current-state
 }
-def gdb-toggle-autojump %{
+
+def gdb-toggle-autojump -docstring "
+toggle the autojump feature.
+See 'gdb-enable-autojump' for a description of the feature.
+" %{
     try %{
         eval %sh{ [ -z "$kak_opt_gdb_autojump_client" ] && printf fail }
         gdb-disable-autojump
@@ -245,7 +328,12 @@ def gdb-toggle-autojump %{
 
 decl -hidden int backtrace_current_line
 
-def gdb-backtrace %{
+def gdb-backtrace -docstring "
+Prints the stacktrace of the program in a dedicated *gdb-backtrace* buffer.
+Pressing <ret> on a line will change the current stack frame.
+If autojump is enabled, this will automatically jump to the corresponding location.
+This command can only be run when the execution of the program is stopped.
+" %{
     try %{
         try %{ db *gdb-backtrace* }
         eval %sh{
@@ -260,6 +348,7 @@ def gdb-backtrace %{
             addhl buffer/ line '%opt{backtrace_current_line}' default+b
             map buffer normal <ret> ': gdb-backtrace-jump<ret>'
             hook -always -once buffer BufCloseFifo .* %{
+                exec ged
                 nop %sh{ rm -f "$kak_opt_gdb_dir"/backtrace }
             }
         }
@@ -278,7 +367,9 @@ def -hidden gdb-backtrace-jump %{
     }
 }
 
-def gdb-backtrace-up %{
+def gdb-backtrace-up -docstring "
+change the current stack frame to the one above 
+" %{
     eval -try-client %opt{jumpclient} %{
         buffer *gdb-backtrace*
         exec "%opt{backtrace_current_line}gk<ret>"
@@ -287,7 +378,9 @@ def gdb-backtrace-up %{
     try %{ eval -client %opt{toolsclient} %{ exec %opt{backtrace_current_line}g } }
 }
 
-def gdb-backtrace-down %{
+def gdb-backtrace-down -docstring "
+change the current stack frame to the one below
+" %{
     eval -try-client %opt{jumpclient} %{
         buffer *gdb-backtrace*
         exec "%opt{backtrace_current_line}gj<ret>"
@@ -300,7 +393,7 @@ def gdb-backtrace-down %{
 
 def -hidden gdb-set-indicator-from-current-state %{
     set global gdb_indicator %sh{
-        [ "$kak_opt_gdb_started" = false ] && exit
+        [ "$kak_opt_gdb_session_started" = false ] && exit
         printf 'gdb '
         a=$(
             [ "$kak_opt_gdb_program_running" = true ] && printf '[running]'
@@ -319,7 +412,7 @@ def gdb-breakpoint-impl -hidden -params 2 %{
         # reduce to cursors so that we can just extract the line out of selections_desc without any hassle
         exec 'gh'
         eval %sh{
-            [ "$kak_opt_gdb_started" = false ] && exit
+            [ "$kak_opt_gdb_session_started" = false ] && exit
             delete="$1"
             create="$2"
             commands=$(
@@ -542,7 +635,7 @@ def -hidden gdb-handle-perl-exited -params 1 %{
         eval %sh{ [ "$kak_opt_gdb_dir" != "$1" ] && printf fail }
 
         # thoroughly clean all options
-        set global gdb_started false
+        set global gdb_session_started false
         set global gdb_program_running false
         set global gdb_program_stopped false
         set global gdb_indicator ""
