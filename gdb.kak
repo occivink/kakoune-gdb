@@ -291,7 +291,7 @@ clear any breakpoint at the current cursor lines
 " %{ gdb-breakpoint-impl true false }
 
 def gdb-toggle-breakpoint -docstring "
-clear any breakpoint at the current cursor lines
+clear or set breakpoint(s), depending on whether there are already ones
 " %{ gdb-breakpoint-impl true true }
 
 # gdb doesn't tell us in its output what was the expression we asked for, so keep it internally for printing later
@@ -299,8 +299,7 @@ decl -hidden str gdb_expression_demanded
 
 def gdb-print -params ..1 -docstring "
 gdb-print [<expression>]: print the value of an expression
-Print the value of the expression specified. If no expression is specified,
-the main selection is used instead.
+If no expression is specified, the main selection is used instead.
 If a *gdb-print* buffer exists, the result will also be appended there.
 " %{
     try %{
