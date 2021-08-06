@@ -290,6 +290,12 @@ def gdb-clear-breakpoint -docstring "
 clear any breakpoint at the current cursor lines
 " %{ gdb-breakpoint-impl true false }
 
+# -break-delete is not used here (or anywhere) because it just responds with '^done'
+# whereas 'delete' does tell us about deleted breakpoints
+def gdb-clear-all-breakpoints -docstring "
+clear all breakpoints
+" %{ gdb-cmd "delete" }
+
 def gdb-toggle-breakpoint -docstring "
 clear or set breakpoint(s), depending on whether there are already ones
 " %{ gdb-breakpoint-impl true true }
