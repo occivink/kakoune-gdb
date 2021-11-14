@@ -97,7 +97,7 @@ starts a new gdb session using 'rr replay'
         done
     }
     try %{
-        terminal rr replay -o --init-eval-command "set mi-async on" --init-eval-command "new-ui mi3 %opt{gdb_dir}/pty"
+        terminal rr replay -- --init-eval-command "set mi-async on" --init-eval-command "new-ui mi3 %opt{gdb_dir}/pty"
     } catch %{
         gdb-session-stop-receiver
         fail 'The ''terminal'' command must be defined to start a gdb session'
