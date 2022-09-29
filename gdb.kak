@@ -121,24 +121,28 @@ def -hidden gdb-session-stop-receiver %{
     }
 }
 
+def -hidden gdb-reset-state %{
+    set global gdb_session_started false
+    set global gdb_program_running false
+    set global gdb_program_stopped false
+    set global gdb_indicator ""
+    set global gdb_dir ""
+
+    set global gdb_breakpoints_info
+    set global gdb_location_info
+    eval -buffer * %{
+        unset buffer gdb_location_flag
+        unset buffer gdb_breakpoint_flags
+    }
+    rmhl global/gdb-ref
+    rmhooks global gdb-ref
+}
+
 def -hidden gdb-session-start-receiver %{
     try %{
         # a previous session was ongoing, stop it and clean the options
         gdb-session-stop
-        set global gdb_session_started false
-        set global gdb_program_running false
-        set global gdb_program_stopped false
-        set global gdb_indicator ""
-        set global gdb_dir ""
-
-        set global gdb_breakpoints_info
-        set global gdb_location_info
-        eval -buffer * %{
-            unset buffer gdb_location_flag
-            unset buffer gdb_breakpoint_flags
-        }
-        rmhl global/gdb-ref
-        rmhooks global gdb-ref
+        gdb-reset-state
     }
     eval %sh{
         if ! command -v socat >/dev/null 2>&1 || ! command -v perl >/dev/null 2>&1; then
@@ -656,21 +660,6 @@ def -hidden gdb-handle-perl-exited -params 1 %{
         # only do this if the session that exited is the current one
         # this might not be the case if a session was started while another was active
         eval %sh{ [ "$kak_opt_gdb_dir" != "$1" ] && printf fail }
-
-        # thoroughly clean all options
-        set global gdb_session_started false
-        set global gdb_program_running false
-        set global gdb_program_stopped false
-        set global gdb_indicator ""
-        set global gdb_dir ""
-
-        set global gdb_breakpoints_info
-        set global gdb_location_info
-        eval -buffer * %{
-            unset buffer gdb_location_flag
-            unset buffer gdb_breakpoint_flags
-        }
-        rmhl global/gdb-ref
-        rmhooks global gdb-ref
+        gdb-reset-state
     }
 }
