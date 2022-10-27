@@ -154,8 +154,8 @@ def -hidden gdb-session-start-receiver %{
         {
             # too bad gdb only exposes its new-ui via a pty, instead of simply a socket
             # the 'wait-slave' argument makes socat exit when the other end of the pty (gdb) exits, which is exactly what we want
-            # 'setsid socat' allows us to ignore any ctrl+c sent from kakoune
-            tail -n +1 -f "${tmpdir}/input_pipe" | setsid socat "pty,wait-slave,link=${tmpdir}/pty,pty-interval=0.1" STDIO,nonblock=1 | perl "$kak_opt_gdb_output_handler"
+            # 'setsid sh' allows us to ignore any ctrl+c sent from kakoune
+            setsid sh -c "tail -n +1 -f '${tmpdir}/input_pipe' | socat 'pty,wait-slave,link=${tmpdir}/pty,pty-interval=0.1' STDIO,nonblock=1 | perl '$kak_opt_gdb_output_handler'"
             # when the perl program finishes (crashed or gdb closed the pty), cleanup and tell kakoune to stop the session
             rm -f "${tmpdir}/input_pipe"
             rmdir "$tmpdir"
