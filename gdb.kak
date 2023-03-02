@@ -2,7 +2,7 @@
 # they must be compatible with gdb arguments
 decl str gdb_program "gdb"
 
-decl -hidden str gdb_output_handler %sh{ printf "%s/%s" "${kak_source%/*}" "gdb-output-handler.perl" }
+decl -hidden str gdb_script_path %val{source}
 
 decl -hidden bool gdb_debug false
 
@@ -57,13 +57,8 @@ addhl shared/gdb group -passes move
 addhl shared/gdb/ flag-lines GdbLocation gdb_location_flag
 addhl shared/gdb/ flag-lines GdbBreakpoint gdb_breakpoints_flags
 
-eval %{
-    try %{
-        %sh{ [ gdb_debug = "false" ] && printf 'fail' }
-        def gdb-debug -hidden -params .. ''
-    } catch %{
-        def gdb-debug -hidden -params .. %{ echo -debug '[gdb][kak]' %arg{@} }
-    }
+try %{
+    def gdb-debug -hidden -params .. ''
 }
 
 # session management commands
@@ -152,10 +147,11 @@ def -hidden gdb-session-start-receiver %{
         export tmpdir=$(mktemp -t -d gdb_kak_XXX)
         mkfifo "${tmpdir}/input_pipe"
         {
+            output_handler="${kak_opt_gdb_script_path%/*}/gdb-output-handler.perl"
             # too bad gdb only exposes its new-ui via a pty, instead of simply a socket
             # the 'wait-slave' argument makes socat exit when the other end of the pty (gdb) exits, which is exactly what we want
             # 'setsid sh' allows us to ignore any ctrl+c sent from kakoune
-            setsid sh -c "tail -n +1 -f '${tmpdir}/input_pipe' | socat 'pty,wait-slave,link=${tmpdir}/pty,pty-interval=0.1' STDIO,nonblock=1 | perl '$kak_opt_gdb_output_handler'"
+            setsid sh -c "tail -n +1 -f '${tmpdir}/input_pipe' | socat 'pty,wait-slave,link=${tmpdir}/pty,pty-interval=0.1' STDIO,nonblock=1 | perl '$output_handler'"
             # when the perl program finishes (crashed or gdb closed the pty), cleanup and tell kakoune to stop the session
             rm -f "${tmpdir}/input_pipe"
             rmdir "$tmpdir"
