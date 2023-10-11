@@ -147,7 +147,7 @@ def -hidden gdb-session-start-receiver %{
         export tmpdir=$(mktemp -t -d gdb_kak_XXX)
         mkfifo "${tmpdir}/input_pipe"
         {
-            output_handler="${kak_opt_gdb_script_path%/*}/gdb-output-handler.perl"
+            output_handler="${kak_opt_gdb_script_path%/*}/gdb-output-handler.perl" # needs kak_session kak_opt_gdb_debug
             # too bad gdb only exposes its new-ui via a pty, instead of simply a socket
             # the 'wait-slave' argument makes socat exit when the other end of the pty (gdb) exits, which is exactly what we want
             # 'setsid sh' allows us to ignore any ctrl+c sent from kakoune
