@@ -146,6 +146,7 @@ def -hidden gdb-session-start-receiver %{
         fi
         export tmpdir=$(mktemp -t -d gdb_kak_XXX)
         mkfifo "${tmpdir}/input_pipe"
+        mkfifo "${tmpdir}/helper_pipe"
         {
             output_handler="${kak_opt_gdb_script_path%/*}/gdb-output-handler.perl" # needs kak_session kak_opt_gdb_debug
             # too bad gdb only exposes its new-ui via a pty, instead of simply a socket
@@ -153,8 +154,7 @@ def -hidden gdb-session-start-receiver %{
             # 'setsid sh' allows us to ignore any ctrl+c sent from kakoune
             setsid sh -c "tail -n +1 -f '${tmpdir}/input_pipe' | socat 'pty,wait-slave,link=${tmpdir}/pty,pty-interval=0.1' STDIO,nonblock=1 | perl '$output_handler'"
             # when the perl program finishes (crashed or gdb closed the pty), cleanup and tell kakoune to stop the session
-            rm -f "${tmpdir}/input_pipe"
-            rmdir "$tmpdir"
+            rm -r "$tmpdir"
             printf "gdb-handle-perl-exited '%s'" "${tmpdir}" | kak -p $kak_session
         } > /dev/null 2>&1 < /dev/null &
         printf "set global gdb_dir '%s'\n" "$tmpdir"
@@ -411,6 +411,10 @@ change the current stack frame to the one below
     }
     try %{ eval -client %opt{toolsclient} %{ exec %opt{backtrace_current_line}g } }
 }
+
+def gdb-disassemble -docstring "
+disassemble the current function into the *gdb-disassembly* buffer
+" %{ gdb-cmd "-data-disassemble" -a "$pc" }
 
 # implementation details
 

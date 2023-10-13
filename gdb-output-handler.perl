@@ -40,6 +40,19 @@ sub send_to_kak {
     return 0;
 }
 
+sub pipe_to_buffer {
+    my $err = shift;
+    if ($err) { return $err; }
+    my $buffer_name = shift;
+    my $content = shift;
+    my $init_command = shift;
+
+    $err = send_to_kak($err, "edit!", "-fifo", "${tmpdir}/helper_pipe", $buffer_name, ";", "evaluate-commands", $init_command);
+    open(my $fh, '>', "${tmpdir}/helper_pipe") or die;
+    print $fh $content;
+    close($fh);
+}
+
 # this parser could be made a LOT simpler by operating in a single pass
 # but gdb doesn't respect its own grammar so we need to introduce dumb hacks
 # they also won't fix it for backwards-compatibility reasons
@@ -343,6 +356,23 @@ while (my $input = <STDIN>) {
         my $val;
         ($err, $val) = parse_string($err, $1);
         $err = send_to_kak($err, "gdb-handle-print", escape($val));
+    } elsif ($input =~ /^\^done,asm_insns=(.*)$/) {
+        my (@insns, $disassembly);
+        ($err, @insns) = parse_array($err, $1);
+        for my $insn (@insns) {
+            my (%map, $inst, $addr, $func, $offset, $line);
+            ($err, %map) = parse_map($err, $insn);
+            ($err, $inst) = parse_string($err, $map{"inst"});
+            ($err, $addr) = parse_string($err, $map{"address"});
+            ($err, $func) = parse_string($err, $map{"func-name"});
+            ($err, $offset) = parse_string($err, $map{"offset"});
+            $line = sprintf("%s +%-6s %s\n", $addr, $offset, $inst);
+            if (!$disassembly) {
+                $disassembly = "disassembly of function $func\n"
+            }
+            $disassembly = $disassembly . $line
+        }
+        $err = pipe_to_buffer($err, "*gdb-disassembly*", $disassembly, "set-option buffer filetype gas")
     }
     if ($err) {
         send_to_kak(0, "echo", "-debug", "[kakoune-gdb]", escape("Internal error handling this output: $input"));
