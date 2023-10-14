@@ -144,7 +144,8 @@ def -hidden gdb-session-start-receiver %{
             printf "fail '''socat'' and ''perl'' must be installed to use this plugin'"
             exit
         fi
-        export tmpdir=$(mktemp -t -d gdb_kak_XXX)
+        # make sure mktemp will use $TMPDIR if set or /tmp
+        export tmpdir=$(mktemp -d -p ${TMPDIR:-/tmp} gdb_kak_XXX);
         mkfifo "${tmpdir}/input_pipe"
         {
             output_handler="${kak_opt_gdb_script_path%/*}/gdb-output-handler.perl"
