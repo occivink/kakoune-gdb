@@ -145,7 +145,7 @@ def -hidden gdb-session-start-receiver %{
             exit
         fi
         # make sure mktemp will use $TMPDIR if set or /tmp
-        export tmpdir=$(mktemp -d -p ${TMPDIR:-/tmp} gdb_kak_XXX);
+        export tmpdir=$(mktemp -d -p ${TMPDIR:-/tmp} gdb_kak_XXXXXX);
         mkfifo "${tmpdir}/input_pipe"
         mkfifo "${tmpdir}/helper_pipe"
         {
